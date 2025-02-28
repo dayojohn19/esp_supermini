@@ -26,7 +26,7 @@ ledlight.wink()
 time.sleep(2)
 
 
-
+# 37 pang mahina
 
 
 
