@@ -72,7 +72,7 @@ class OTAUpdater:
             self.latest_code = response.text
             return True
         elif response.status_code == 404:
-            print(f'Firmware not found - {firmware_url}.')
+            print(f'File not found at \n     {firmware_url}')
             pass
 
     def update_no_reset(self):
@@ -90,25 +90,29 @@ class OTAUpdater:
         """ Check if updates are available."""
         response = urequests.get(self.version_url)
         try:
+            if '404' in response.text:
+                print('Cant found version URL 404')
+                return
             data = json.loads(response.text)
             self.latest_version = int(data['version'])
-            print(f'latest version is: {self.latest_version}')
-        except:
+            print(f'        Latest: {self.latest_version}\n         Current: {self.current_version}')    
+            return True if self.current_version < self.latest_version else False
+        except Exception as e:
+            print('Error: ',e)
             self.latest_version = 2
             self.current_version = 1
-        newer_version_available = True if self.current_version < self.latest_version else False
-        print(f'Newer version available: {newer_version_available}')    
-        return newer_version_available
     
     def download_and_install_update_if_available(self):
         gc.collect()
         if self.check_for_updates():
-            print('Downloading latest code...')
+            print('Updating Latest...')
             self.firmware_urls = []
             for filename in self.filenames:
+                print(f'        Updating: {filename}')
                 time.sleep(0.1)
                 gc.collect()
                 url = self.repo_url + 'main/' + filename
+                print(f'            {url}')
                 self.firmware_urls.append(url)
             for i in range(len(self.firmware_urls)):
                 gc.collect()
@@ -117,13 +121,13 @@ class OTAUpdater:
                         self.update_no_reset() 
                         self.update_and_reset(self.filenames[i]) 
                 except:
-                    print('Passing: ',self.firmware_urls[i])
+                    print('Cant Update: ',self.firmware_urls[i])
                 time.sleep(1)
             with open('version.json', 'w') as f:
                 json.dump({'version': self.current_version}, f)
             # print('Restarting device... 5')
             # sleep(5)
-            print("\n\n         Applying Updates\n\n")
+            print("\n\n         Applying Updates and Restarting \n\n")
             time.sleep(3)
             # reset()  
         else:
