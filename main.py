@@ -125,7 +125,7 @@ class OTAUpdater:
             # sleep(5)
             print("\n\n         Applying Updates\n\n")
             time.sleep(3)
-            reset()  
+            # reset()  
         else:
             ledlight.stop()
             print('No new updates available.')
