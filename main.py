@@ -26,6 +26,7 @@ flyblink = 419
 ledlight = LEDSignal(ledsignalPin)
 ledlight.wink()
 sim = Sim(uart_num=sim_uart, tx=sim_tx,rx=sim_rx)
+clock = Clock(sqw_pin=clock_sqw,scl_pin=clock_scl,sda_pin=clock_sda,handler_alarm=alarm_handler,alarm_time=alarm)
 time.sleep(2)
 
 
@@ -625,12 +626,12 @@ def date_to_tuple(datestr):
 
 def alarm_handler():
     try:
-        sim = Sim(uart_num=sim_uart, tx=sim_tx,rx=sim_rx)
+        sim = sim
         ts = sim.datetime()
         sim.sendSMS(message=f'{ts} Alarm Is Triggered ')
     except:
         try:
-            sim = Sim(uart_num=sim_uart, tx=sim_tx,rx=sim_rx)
+            sim = sim
             ts = sim.datetime()
             sim.sendSMS(message=f'{ts}Alarm Is Triggered')
         except:
@@ -689,7 +690,7 @@ try:
 
             if self.isDaytime() == False:
             # if self.isDaytime() == True:
-                self.clock = Clock(sqw_pin=clock_sqw,scl_pin=clock_scl,sda_pin=clock_sda,handler_alarm=alarm_handler,alarm_time=alarm)
+                self.clock = clock
                 print('Going TO sleep')
                 for i in range(10):
                     time.sleep(1)
@@ -735,7 +736,7 @@ try:
                     textWriter('log.txt',toLogString)
                 except Exception as e:
                     textWriter('log.txt', f'Error Logging Runtime  {RTC.datetime()} -  {e}')
-                clock = Clock(sqw_pin=clock_sqw,scl_pin=clock_scl,sda_pin=clock_sda,handler_alarm=alarm_handler,alarm_time=alarm)
+                clock = clock
                 print('Sleeping Again for ', self.moduleSleepTime)
                 time.sleep(5)
                 gnd.off
@@ -780,125 +781,6 @@ try:
             return False
     
 
-    # class AutomaticFeedMachine():
-    #     def __init__(self):
-    #         self.gnd_active = Pin(groundPin,Pin.OUT)
-    #         self.gnd_active.on()
-    #         time.sleep(1)
-    #         self.importClock()
-    #         self.importSim()
-    #         # self.sim.power.off()
-    #         try:
-    #             self.sim.power.off()
-    #         except:
-    #             print('No Sim')
-    #         # blueLED.start(100)
-
-    #     def importSim(self):    
-    #         try:
-    #             from SimModule import Sim
-    #             self.sim = Sim(uart_num=sim_uart, tx=sim_tx,rx=sim_rx)
-    #         except Exception as e:
-    #             textWriter('error.txt',e)
-    #             print('Cant Import Sim Module First Try ',e)
-    #             try:
-    #                 print('Second Trial Importing sim module')
-    #                 self.gnd_active.off()
-    #                 time.sleep(2)
-    #                 self.gnd_active.on()
-    #                 time.sleep(2)
-    #                 from SimModule import Sim
-    #                 self.sim = Sim(uart_num=sim_uart, tx=sim_tx,rx=sim_rx)
-    #             except:
-    #                 textWriter('error.txt', 'importSim ')
-    #         # from clockAlarm import set_alarm_everyday,set_alarm2_everyday, alarmclock
-    #     def initiateTrain(self):
-    #         try:
-    #             ntrain = 3
-    #             flySecond = 180
-    #             sct= ' '.join(self.clock.get_time())
-    #             textWriter('train.txt',f'[ {sct} ] ++ Started Training recursion: {ntrain} second: {20}\n')
-    #             trainer = Train()
-    #             trainer.train(ntrain,flySecond)
-    #             ect= ' '.join(self.clock.get_time())
-    #             textWriter('train.txt',f'[ {ect} ] ---- Ended Training \n')
-    #         except Exception as e:
-    #             textWriter('error.txt', 'initiateTrain ')
-    #             print("\n\n    ",e)
-    #     def importClock(self):
-    #         try:
-    #             from configs.configs import clock_scl, clock_sda, clock_sqw, alarm 
-    #             from clockModule import Clock
-    #             self.clock = Clock(sqw_pin=clock_sqw,scl_pin=clock_scl,sda_pin=clock_sda,handler_alarm=self.alarm_handler,alarm_time=alarm)
-    #             # clock = Clock(sqw_pin=clock_sqw,scl_pin=clock_scl,sda_pin=clock_sda,alarm_time=alarm)
-    #             print("DONE Setting up Alarm")
-    #         except Exception as e:
-    #             textWriter('error.txt', f'importClock Error {e}')
-    #             print('Cant import clock' ,e)
-        
-    #     def alarm_handler(self):
-    #         tstamp = ''
-    #         tstamp2 = ''
-    #         try:
-    #             # ic.active(False)
-    #             pass
-    #         except:
-    #             print('No IC found!')
-    #         self.gnd_active.on()
-    #         try:
-    #             tstamp= ' '.join(self.clock.get_time())
-    #             textWriter('alarm.txt',f'[ {tstamp} ]  +++ Alarm Stared ')
-    #         except:
-    #             try:
-    #                 print('Trying againd')
-    #                 self.importClock()
-    #                 time.sleep(2)
-    #                 tstamp= ' '.join(self.clock.get_time())
-    #                 textWriter('alarm.txt',f'[ {' '.join(self.clock.get_time())} ]  +++ Alarm Stared ')
-    #             except:
-    #                 print('Really Cant import self.clock')
-
-    #         try:
-    #             try:
-    #                 addmessage = self.sim.battery()
-    #             except:
-    #                 try:
-    #                     from SimModule import Sim
-    #                     self.sim = Sim(uart_num=sim_uart, tx=sim_tx,rx=sim_rx)
-    #                     addmessage = self.sim.battery()
-    #                 except:
-    #                     print('Really cant import Sim absrd')
-    #             self.sim.sendSMS(number="639765514253",message=f'Alarm runs successfully at {addmessage}')
-    #         except: print('Cant send text amessage')
-    #         try:
-    #             self.initiateTrain()
-    #         except Exception as e:
-    #             print('Erro training: ',e)
-    #         try: # connect wo whatsapp
-    #             addmessage = self.sim.battery()
-    #             try:
-    #                 addmessage += checkBattery()
-    #             except:
-    #                 print('cant include battery')
-    #                 pass
-    #             try:
-    #                 self.sim.sendwhatsapp(f'Alarm runs successfully at {addmessage}')
-    #             except:
-    #                 pass
-    #             try:
-    #                 self.sim.sendSMS(message=f'Alarm runs successfully at {addmessage}')
-    #             except: pass
-    #             # try:
-    #             #     sim.sendSMS(number="639765514253",message=f'Alarm runs successfully at {addmessage}')
-    #             # except: pass
-    #             pass
-    #             tstamp2 = ' '.join(self.clock.get_time())
-    #             textWriter('alarm.txt',f'[ {tstamp2} ]  --- Alarm Ended ')
-
-    #         except Exception as e:
-    #             textWriter('error.txt', 'alarmHandler '+str(e))
-    #             print('Sending Message failed: ',e)    
-    #         self.gnd_active.off()
 
 except Exception as e:
     print('\n ++++++++++   Cant Create Automatic Feeder Machine    ',e)
@@ -911,13 +793,15 @@ print('\n----------- \n  ')
 
 try:
     print('trying to update')
-    # ic = connect_or_create_wifi()
-    # ou = OTAUpdater()
+    af = AutoFeeder()
+    gnd.on
+    ic = connect_or_create_wifi()
+    ou = OTAUpdater()
 
 except Exception as e: print("Error COnnecting to network!", "   Reason: ",e)
 # gnd.on
 time.sleep(1)
-# af = AutoFeeder()
+
 # if gnd.power:
 #     # try:
 #     #     af = AutoFeeder()
