@@ -26,22 +26,20 @@ ledlight.wink()
 time.sleep(2)
 
 
-# 37 pang mahina
-
-
 
 
 import gc
 import os
 import json
 import urequests
-for i in range(10):
+for i in range(4):
     print(f'Updated from github v2{i}')
+    time.sleep(1)
 class OTAUpdater:
     print("OTA Updating")
     ledlight.start(100)
-    # giturl = "https://github.com/dayojohn19/esp_supermini/"
-    giturl = "https://github.com/dayojohn19/esp_supermini/refs/heads/"
+    giturl = "https://github.com/dayojohn19/esp_supermini/"
+    # giturl = "https://github.com/dayojohn19/esp_supermini/refs/heads/"
     files_to_update=["main.py"]
     def __init__(self, repo_url=giturl, filenames=files_to_update):
         self.filenames = filenames
@@ -86,6 +84,7 @@ class OTAUpdater:
         return
 
     def update_and_reset(self,filename):
+        print('renaming latest_code.py to ',filename)
         os.rename('latest_code.py', filename)  
         return
 
@@ -114,7 +113,6 @@ class OTAUpdater:
                 print(f'        Updating: {filename}')
                 time.sleep(0.1)
                 gc.collect()
-                del len
                 url = self.repo_url + 'main/' + filename
                 print(f'            {url}')
                 self.firmware_urls.append(url)
@@ -124,9 +122,9 @@ class OTAUpdater:
                     if self.fetch_latest_code(self.firmware_urls[i]):
                         self.update_no_reset() 
                         self.update_and_reset(self.filenames[i]) 
-                        print('Done ', self.filenames[i])
-                except:
-                    print('Cant Update: ',self.firmware_urls[i])
+                        print('Done ', i)
+                except Exception as e:
+                    print('Cant Update: ',i, "reason: ",e)
                 time.sleep(1)
             with open('version.json', 'w') as f:
                 json.dump({'version': self.current_version}, f)
@@ -226,14 +224,14 @@ def connect_or_create_wifi():
     # ic.config(essid=str('mywifi'),password='1234')
     # blueLED.start(1000)
     print("Connecting to: ",wifiSSID)
-    wifiConnection =  wait_for_change(wifi.isconnected, 5000)
+    wifiConnection =  wait_for_change(wifi.isconnected, 7000)
     if wifiConnection == False:
         wifi.active(False)
         # blueLED.start(100)
         time.sleep(2)
         ic = network.WLAN(network.AP_IF)
         ic.active(True)        
-        ic.config(essid=str('DAYO_CONTROLLER'),password='123456789')
+        ic.config(essid=str('HGW-5DF528'),password='dayosfamily')
         # ic.config(essid=str('mywifi'),password='1234')
         print("Created Hotspot")
         print('Web REPL on : ',ic.ifconfig())
@@ -884,10 +882,12 @@ print('\n----------- \n  ')
 
 try:
     ic = connect_or_create_wifi()
-except: print("Error COnnecting to network")
+    ou = OTAUpdater()
+
+except Exception as e: print("Error COnnecting to network", "   Reason: ",e)
 # gnd.on
 time.sleep(1)
-af = AutoFeeder()
+# af = AutoFeeder()
 # if gnd.power:
 #     # try:
 #     #     af = AutoFeeder()
