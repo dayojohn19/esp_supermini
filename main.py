@@ -19,6 +19,7 @@ Pin(clock_sda, Pin.OUT, Pin.PULL_DOWN) # Because its powering RTC 3v
 alarm = {'am':7,'pm':15,'min':30}
 pressed_time = 0
 textfiles = ['feed','alarm','error']
+files_to_update=["main.py", "version.json"]
 feedblink = 119
 flyblink = 419
 ledlight = LEDSignal(ledsignalPin)
@@ -38,7 +39,6 @@ for i in range(4):
 class OTAUpdater:
     ledlight.start(100)
     giturl = "https://github.com/dayojohn19/esp_supermini/"
-    files_to_update=["main.py"]
     def __init__(self, repo_url=giturl, filenames=files_to_update):
         self.filenames = filenames
         self.repo_url = repo_url
