@@ -33,13 +33,11 @@ import os
 import json
 import urequests
 for i in range(4):
-    print(f'Updated from github v2{i}')
+    print(f'Updated from github v3{i}')
     time.sleep(1)
 class OTAUpdater:
-    print("OTA Updating")
     ledlight.start(100)
     giturl = "https://github.com/dayojohn19/esp_supermini/"
-    # giturl = "https://github.com/dayojohn19/esp_supermini/refs/heads/"
     files_to_update=["main.py"]
     def __init__(self, repo_url=giturl, filenames=files_to_update):
         self.filenames = filenames
@@ -132,7 +130,7 @@ class OTAUpdater:
             # sleep(5)
             print("\n\n         Applying Updates and Restarting \n\n")
             time.sleep(3)
-            # reset()  
+            reset()  
         else:
             ledlight.stop()
             print('No new updates available.')
