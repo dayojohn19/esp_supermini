@@ -83,13 +83,13 @@ class Sim():
                 print('Connected 6/6')
             else:
                 print('waiting for connection')
-                time.sleep(6)
+                time.sleep(10)
                 if ic.isconnected():
                     print('Connected 6/6')
 
                 else:
                     print('Cant Connect')
-                    return False
+
             print('Internet Connected variable  self.ic   ')
             self.ic = ic
             return True

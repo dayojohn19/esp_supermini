@@ -126,10 +126,12 @@ class OTAUpdater:
                 time.sleep(1)
             with open('version.json', 'w') as f:
                 json.dump({'version': self.current_version}, f)
-            # print('Restarting device... 5')
+            print('Restarting device... 5')
+            for i in range(5):
+                time.sleep(1)
+                print(f'{5-i}')
             # sleep(5)
             print("\n\n         Applying Updates and Restarting \n\n")
-            time.sleep(3)
             reset()  
         else:
             ledlight.stop()
