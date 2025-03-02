@@ -13,6 +13,7 @@ from utime import ticks_ms
 from configs.configs import clock_scl, clock_sda, clock_sqw, alarm 
 from clockModule import Clock, DS3231
 import _thread
+import socket
 Pin(clock_scl, Pin.OUT, Pin.PULL_DOWN) # Because its powering RTC 3v 
 Pin(clock_sqw, Pin.OUT, Pin.PULL_DOWN) # Because its powering RTC 3v 
 Pin(clock_sda, Pin.OUT, Pin.PULL_DOWN) # Because its powering RTC 3v 
@@ -24,6 +25,7 @@ feedblink = 119
 flyblink = 419
 ledlight = LEDSignal(ledsignalPin)
 ledlight.wink()
+sim = Sim(uart_num=sim_uart, tx=sim_tx,rx=sim_rx)
 time.sleep(2)
 
 
@@ -196,6 +198,18 @@ def textWriter(fileName=None, toWrite=None):
 
 
 def connect_or_create_wifi():
+    def test_internet_connection():
+        try:
+            # Try to connect to Google's DNS server (8.8.8.8)
+            addr = socket.getaddrinfo('8.8.8.8', 53)
+            s = socket.socket()
+            s.connect(addr[0][-1])
+            print('Internet connected')
+            s.close()
+            return True
+        except Exception as e:
+            print('No internet connection:', e)
+    
     def wait_for_change(check_func, timeout_ms, *args, **kwargs):
         start_time = time.ticks_ms()
         last_value = check_func(*args, **kwargs)  # Get the initial value
@@ -225,23 +239,38 @@ def connect_or_create_wifi():
     # blueLED.start(1000)
     print("Connecting to: ",wifiSSID)
     wifiConnection =  wait_for_change(wifi.isconnected, 7000)
-    if wifiConnection == False:
-        wifi.active(False)
-        # blueLED.start(100)
-        time.sleep(2)
-        ic = network.WLAN(network.AP_IF)
-        ic.active(True)        
-        ic.config(essid=str('HGW-5DF528'),password='dayosfamily')
-        # ic.config(essid=str('mywifi'),password='1234')
-        print("Created Hotspot")
-        print('Web REPL on : ',ic.ifconfig())
-        # blueLED.stop()
+    try:
+        if wifiConnection == False:
+            wifi.active(False)
+            # blueLED.start(100)
+            time.sleep(2)
+            ic = network.WLAN(network.AP_IF)
+            ic.active(True)        
+            ic.config(essid=str('HGW-5DF528'),password='dayosfamily')
+            # ic.config(essid=str('mywifi'),password='1234')
+            print("Created Hotspot")
+            print('Web REPL on : ',ic.ifconfig())
+            # blueLED.stop()
+        else:
+            ic = network.WLAN(network.AP_IF)
+            ic.active(False)
+            # blueLED.stop()
+            print('Web REPL on : ',wifi.ifconfig())
+            print("Connected Wifi")
+    except Exception as e:
+        print('Error in wifi connection: ',e)
+        textWriter('error.txt',f'Error in wifi connection: {e}')
+    if test_internet_connection():
+        print("Connected to the internet")
     else:
-        ic = network.WLAN(network.AP_IF)
-        ic.active(False)
-        # blueLED.stop()
-        print('Web REPL on : ',wifi.ifconfig())
-        print("Connected Wifi")
+        print('Connecting to internet via sim')
+        sim.connectInternet()
+        if test_internet_connection():
+            print("\n       SIM     Connected to the internet")
+        else:
+            print("No internet connection")
+            textWriter('error.txt','No internet connection')
+            return False
     return ic
 
 
@@ -643,7 +672,7 @@ try:
             try: 
                 try:
                     time.sleep(2)
-                    self.sim = Sim(uart_num=sim_uart, tx=sim_tx,rx=sim_rx)
+                    self.sim = sim
                 except Exception as e:
                     print('Error first importing Sim: ',e)
                     # try: self.sim = Sim(uart_num=sim_uart, tx=sim_tx,rx=sim_rx)
@@ -881,8 +910,9 @@ print('\n----------- \n  ')
 
 
 try:
-    ic = connect_or_create_wifi()
-    ou = OTAUpdater()
+    print('trying to update')
+    # ic = connect_or_create_wifi()
+    # ou = OTAUpdater()
 
 except Exception as e: print("Error COnnecting to network!", "   Reason: ",e)
 # gnd.on
