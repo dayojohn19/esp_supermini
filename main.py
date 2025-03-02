@@ -884,7 +884,7 @@ try:
     ic = connect_or_create_wifi()
     ou = OTAUpdater()
 
-except Exception as e: print("Error COnnecting to network", "   Reason: ",e)
+except Exception as e: print("Error COnnecting to network!", "   Reason: ",e)
 # gnd.on
 time.sleep(1)
 # af = AutoFeeder()
