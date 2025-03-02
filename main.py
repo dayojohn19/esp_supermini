@@ -36,12 +36,12 @@ import os
 import json
 import urequests
 for i in range(10):
-    print(f'Updated from github {i}')
+    print(f'Updated from github v2{i}')
 class OTAUpdater:
     print("OTA Updating")
     ledlight.start(100)
-    giturl = "https://github.com/dayojohn19/esp_supermini/"
-    # giturl = "https://github.com/dayojohn19/esp_supermini/refs/heads/"
+    # giturl = "https://github.com/dayojohn19/esp_supermini/"
+    giturl = "https://github.com/dayojohn19/esp_supermini/refs/heads/"
     files_to_update=["main.py"]
     def __init__(self, repo_url=giturl, filenames=files_to_update):
         self.filenames = filenames
