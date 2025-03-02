@@ -34,7 +34,7 @@ import os
 import json
 import urequests
 for i in range(4):
-    print(f'Updated from github v3{i}')
+    print(f'Updated from github v4{i}')
     time.sleep(1)
 class OTAUpdater:
     ledlight.start(100)
