@@ -35,6 +35,8 @@ import gc
 import os
 import json
 import urequests
+for i in range(10):
+    print(f'Updated from github {i}')
 class OTAUpdater:
     print("OTA Updating")
     ledlight.start(100)
