@@ -41,6 +41,7 @@ class OTAUpdater:
     print("OTA Updating")
     ledlight.start(100)
     giturl = "https://github.com/dayojohn19/esp_supermini/"
+    # giturl = "https://github.com/dayojohn19/esp_supermini/refs/heads/"
     files_to_update=["main.py"]
     def __init__(self, repo_url=giturl, filenames=files_to_update):
         self.filenames = filenames
@@ -113,6 +114,7 @@ class OTAUpdater:
                 print(f'        Updating: {filename}')
                 time.sleep(0.1)
                 gc.collect()
+                del len
                 url = self.repo_url + 'main/' + filename
                 print(f'            {url}')
                 self.firmware_urls.append(url)
@@ -122,6 +124,7 @@ class OTAUpdater:
                     if self.fetch_latest_code(self.firmware_urls[i]):
                         self.update_no_reset() 
                         self.update_and_reset(self.filenames[i]) 
+                        print('Done ', self.filenames[i])
                 except:
                     print('Cant Update: ',self.firmware_urls[i])
                 time.sleep(1)
