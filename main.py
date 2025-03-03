@@ -14,6 +14,144 @@ from configs.configs import clock_scl, clock_sda, clock_sqw, alarm
 from clockModule import Clock, DS3231
 import _thread
 import socket
+
+
+import json
+import os
+
+class JsonHandler:
+    def __init__(self, file_path):
+        # current_dir = os.getcwd()
+        file_path = 'data.json'
+        self.file_path = file_path
+        self.light = LEDSignal(doorservoPin)
+        try:
+            self.data = self.read()
+        except:
+            self.data = {}
+            self.save
+            self.data = self.read()
+
+    @property
+    def save(self):
+        try:
+            with open(self.file_path, 'w') as file:
+                json.dump(self.data, file)
+            print(f"Successfully wrote to {self.file_path}")
+            self.light.wink(0.5)
+            return True
+        except Exception as e:
+            print(f"Error writing JSON: {e}")
+            return True
+    def add_maker(self):
+        time.sleep(5)
+        return time.time()
+
+    def add(self, rf_id, initial_count=1):
+        """Add new card or update existing card in JSON file"""
+        try:
+            # Read existing data
+            # data = self.read(self.file_path)
+            # Add or update card
+            if rf_id not in self.data:
+                self.data[rf_id] = {
+                    "entry_count": initial_count,
+                    "entries": {initial_count: _thread.start_new_thread(self.add_maker, ())},
+                    "last_seen": time.time(),
+                    "inside": True
+                }
+            else:
+                self.data[rf_id]["entry_count"] += 1
+                self.data[rf_id]["entries"].update({self.data[rf_id]["entry_count"]: time.time()})
+                self.data[rf_id]["last_seen"] = time.time()
+                self.data[rf_id]["inside"] = True
+            # Write back to file
+            # if self.write(self.data):
+            #     print(f"Card {rf_id} successfully added/updated")
+            #     return True
+        except Exception as e:
+            print(f"Error adding card: {e}")
+            return False
+
+    def read(self):
+        try:
+            with open(self.file_path, 'r') as file:
+                data = json.load(file)
+        except FileNotFoundError:
+            print('creating file')
+            default_data = {}
+            with open(self.file_path, 'w') as file:
+            # with open(file_path, 'w') as file:
+                json.dump(default_data if default_data is not None else {}, file, indent=4)
+                data = default_data if default_data is not None else {}
+            # data = {}
+        return data
+j  = JsonHandler('data.json')
+
+gothread = True
+def thread1():
+    print('\n     Starting thread 1....\n\n')
+    rfid1 = UART(1, baudrate=9600, rx=doorPin, timeout=10)  # Reduced timeout
+    rfid1.flush()
+    lt = ''
+    sc = 0
+    msdelay = 25  # Reduced delay to 50ms
+    def read_rfid_data(uart):
+        if uart.any():  # Check if data available
+            start = uart.read(1)
+            if start == b'\x02':
+                data = uart.read(12)
+                end = uart.read(1)
+                try:
+                    if data and len(data) == 12 and end == b'\x03':
+                        tag_hex = data[0:10].decode()
+                        return tag_hex[1:10]
+                except:
+                    pass
+            else:
+                try:
+                    data = uart.read(20).decode()[:9]
+                    if data and int(data[0]) >= 1 and len(data) <= 9 and ' ' not in data:
+                        return data
+                except:
+                    pass
+        return None
+
+    while gothread:
+        tag = read_rfid_data(rfid1)
+        if tag:
+            if tag == lt:
+                sc += 1
+                print(f'.', end='')
+                j.light.wink(0.1)
+
+                
+            else:
+                lt = tag
+                print(f'\nTAG: {tag}')
+                j.add(tag)
+                print('r', end='')
+                j.save
+                sc = 0
+                
+        time.sleep_ms(msdelay)  # Reduced sleep time
+    
+    print('Ending thread....')
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 Pin(clock_scl, Pin.OUT, Pin.PULL_DOWN) # Because its powering RTC 3v 
 Pin(clock_sqw, Pin.OUT, Pin.PULL_DOWN) # Because its powering RTC 3v 
 Pin(clock_sda, Pin.OUT, Pin.PULL_DOWN) # Because its powering RTC 3v 
@@ -26,6 +164,21 @@ flyblink = 419
 ledlight = LEDSignal(ledsignalPin)
 ledlight.wink()
 sim = Sim(uart_num=sim_uart, tx=sim_tx,rx=sim_rx)
+
+def alarm_handler():
+    try:
+        sim = sim
+        ts = sim.datetime()
+        sim.sendSMS(message=f'{ts} Alarm Is Triggered ')
+    except:
+        try:
+            sim = sim
+            ts = sim.datetime()
+            sim.sendSMS(message=f'{ts}Alarm Is Triggered')
+        except:
+            print('cant send message')
+    print('\n  +++++ Alarm Pass Function Triggered! ++++\n')
+
 clock = Clock(sqw_pin=clock_sqw,scl_pin=clock_scl,sda_pin=clock_sda,handler_alarm=alarm_handler,alarm_time=alarm)
 time.sleep(2)
 
@@ -623,20 +776,6 @@ def date_to_tuple(datestr):
         hour = 0
     date_tuple = (year, month, day, hour, minute, second, 0)
     return date_tuple #(0-year, 1-month, 2-day, 3-hour, 4-minutes[, 5-seconds[, 6-weekday]])
-
-def alarm_handler():
-    try:
-        sim = sim
-        ts = sim.datetime()
-        sim.sendSMS(message=f'{ts} Alarm Is Triggered ')
-    except:
-        try:
-            sim = sim
-            ts = sim.datetime()
-            sim.sendSMS(message=f'{ts}Alarm Is Triggered')
-        except:
-            print('cant send message')
-    print('\n  +++++ Alarm Pass Function Triggered! ++++\n')
 
  
 

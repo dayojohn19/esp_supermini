@@ -23,8 +23,8 @@ groundPin = 10
 servoPin= 9
 feederpin = 9
 gatePin = 2
-doorPin = 5
-doorservoPin = 3
+doorPin = 5 # RDM6300 rx
+doorservoPin = 3 # Buzzer
 
 
 # groundPin=10
