@@ -21,7 +21,6 @@ import os
 
 class JsonHandler:
     def __init__(self, file_path):
-        # current_dir = os.getcwd()
         file_path = 'data.json'
         self.file_path = file_path
         self.light = LEDSignal(doorservoPin)
@@ -50,9 +49,6 @@ class JsonHandler:
     def add(self, rf_id, initial_count=1):
         """Add new card or update existing card in JSON file"""
         try:
-            # Read existing data
-            # data = self.read(self.file_path)
-            # Add or update card
             if rf_id not in self.data:
                 self.data[rf_id] = {
                     "entry_count": initial_count,
@@ -65,10 +61,6 @@ class JsonHandler:
                 self.data[rf_id]["entries"].update({self.data[rf_id]["entry_count"]: time.time()})
                 self.data[rf_id]["last_seen"] = time.time()
                 self.data[rf_id]["inside"] = True
-            # Write back to file
-            # if self.write(self.data):
-            #     print(f"Card {rf_id} successfully added/updated")
-            #     return True
         except Exception as e:
             print(f"Error adding card: {e}")
             return False
@@ -81,10 +73,8 @@ class JsonHandler:
             print('creating file')
             default_data = {}
             with open(self.file_path, 'w') as file:
-            # with open(file_path, 'w') as file:
                 json.dump(default_data if default_data is not None else {}, file, indent=4)
                 data = default_data if default_data is not None else {}
-            # data = {}
         return data
 j  = JsonHandler('data.json')
 
