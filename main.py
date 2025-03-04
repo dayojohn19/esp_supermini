@@ -3,7 +3,7 @@
 # for bare11
 from machine import Pin, I2C, RTC , DEEPSLEEP,SoftI2C, reset
 from configs.configs import sim_rx,sim_tx,sim_uart, wifiSSID ,wifipassword, groundPin, gatePin, doorPin,doorservoPin, ledsignalPin, BatteryMotorPin , feederpin
-from machine import UART, Pin, ADC, RTC, sleep, deepsleep,lightsleep, PWM, reset_cause
+from machine import UART, Pin, ADC, RTC, sleep, deepsleep,lightsleep, PWM, reset_cause, Timer
 from led_signal import LEDSignal
 import network
 import time
@@ -15,22 +15,248 @@ from clockModule import Clock, DS3231
 import _thread
 import socket
 
-
+import ujson
 import json
 import os
 
-class JsonHandler:
-    def __init__(self, file_path):
-        file_path = 'data.json'
+def date_to_tuple(datestr, ismachineRTC=False):
+    
+    """
+    from sim.datetime() to updating ds3231 time
+    """
+    date_str = datestr
+    month_map = {'January': 1, 'February': 2, 'March': 3, 'April': 4, 'May': 5,'June': 6, 'July': 7, 'August': 8, 'September': 9, 'October': 10,'November': 11, 'December': 12}
+    date_parts = date_str.split(', ')
+    month_name = date_parts[0]
+    day, year = date_parts[1].split(' ')
+    month = month_map[month_name]
+    day = int(day)
+    year = int(year)
+    time_parts, am_pm = date_parts[2].split(' ')
+    hour, minute, second = map(int, time_parts.split(':'))
+    if am_pm == 'PM' and hour != 12:
+        hour += 12
+    elif am_pm == 'AM' and hour == 12:
+        hour = 0
+    if ismachineRTC:
+        date_tuple = (year, month, day, 0, hour, minute, second, 0)
+    else:   
+        date_tuple = (year, month, day, hour, minute, second, 0)
+    return date_tuple #(0-year, 1-month, 2-day, 3-hour, 4-minutes[, 5-seconds[, 6-weekday]])
+
+ 
+
+def updateClock(c,s, ismachine=False):
+    try:
+        c.datetime()
+    except:
+        c.clock.datetime()
+        c = c.clock
+    # if c.OSF():
+    newTime = s.datetime()
+    updatedt = date_to_tuple(newTime, ismachineRTC=ismachine)
+    c.datetime((updatedt))
+    print('+++ Time Updated ++++')
+class Feeder():
+    def __init__(self,feederpin=feederpin, initFeed = 10):
+        self.servo_pin = Pin(feederpin)
+        self.servo = PWM(self.servo_pin)
+        self.servo.freq(50)
+        self.backwward = 23
+        self.stop = 0
+        self.forward = 110
+        self.slowforward = 90
+        self.initFeed=initFeed
+        self.goCount = 3
+        self.servo.duty(0)
+    def back(self):
+        gnd.on
+        time.sleep(0.01)
+        for s in range(5):
+            time.sleep(0.1)
+            self.servo.duty(self.backwward)
+            time.sleep(0.1)
+            self.servo.duty(self.stop)
+            time.sleep(0.1)
+            print(s)
+        gnd.off
+    def finish(self):
+        try:
+            self.servo.duty_u16(0)
+        except:
+            self.servo.duty(0)
+        time.sleep(1)
+        gnd.off
+    @property
+    def slow(self):
+        gnd.on
+        self.servo.duty(self.slowforward)
+        time.sleep(1.4) # One Complete rev
+        self.servo.duty(0)
+    @property
+    def go(self):
+        gnd.on
+        self.servo.duty(self.forward)
+        # time.sleep(0.636) # One Complete Revolution
+        time.sleep(0.16) # One Complete Revolution
+        # time.sleep(0.32) # One Complete Revolution
+        self.servo.duty(0)
+feeder = Feeder()
+
+def resetPin():
+    pins = [20, 21, 4, 7, 6,5,10]
+    for i in range(2):
+        time.sleep(0.1)
+        gc.collect
+        time.sleep(0.1)
+        for pin_num in pins:
+            time.sleep(0.1)
+            try:
+                pin = Pin(pin_num, Pin.IN, Pin.PULL_DOWN)  # Set the pin to input mode
+                pin.value(0)  # Ensure the pin value is reset to low (0)
+                print(f"GPIO{pin_num} reset to input mode with low value")
+            except ValueError:
+                # Some pins might not be available or might be reserved for special functions
+                print(f"GPIO{pin_num} is not available or cannot be reset")
+    # try:
+    #     len = 1
+    #     del len
+    # except Exception as e:
+    #     print('Error in del len',e)
+
+def real_time(time_tuple=RTC().datetime()):
+    # time_tuple = self.clock.datetime()
+    month_names = ["January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December"]
+    year = time_tuple[0]
+    month = time_tuple[1]
+    day = time_tuple[2]
+    hour = time_tuple[4]
+    minute = time_tuple[5]
+    second = time_tuple[6]
+    if hour >= 12:
+        period = "PM"
+        if hour > 12:
+            hour -= 12
+    else:
+        period = "AM"
+        if hour == 0:
+            hour = 12  # Midnight case
+    formatted_time = '{} {}, {} {:02}:{:02}:{:02} {}'.format(
+        month_names[month - 1], day, year, hour, minute, second, period)
+    return formatted_time
+
+
+class Power:
+    def __init__(self,pin = groundPin):
+        self.pin = Pin(pin,Pin.OUT)
+        self.power = False
+    @property
+    def on(self):
+        self.pin.value(1)
+        self.power = True
+    @property
+    def off(self):
+        self.pin.value(0)
+        self.power = False
+
+gnd = Power(groundPin) # whole ground Pin
+def isim():
+    st = time.time()
+    time.sleep(1)
+    gnd = Power(groundPin) # whole ground Pin
+    gnd.on
+    while time.time() - st < 10:
+        sim = Sim(uart_num=sim_uart, tx=sim_tx,rx=sim_rx)
+        if sim is not None:
+            break
+    return sim
+# try:
+#     gnd.on
+#     print('1st Time Sim Object')
+#     time.sleep(2)
+#     sim = Sim(uart_num=sim_uart, tx=sim_tx,rx=sim_rx)
+# except Exception as e:
+#     try:
+#         print('2nd Time Importing Sim')
+#         gnd.on
+#         time.sleep(3)
+#         sim = Sim(uart_num=sim_uart, tx=sim_tx,rx=sim_rx)
+#     except Exception as e:
+#         print('Error in Sim Object: ',e)
+def alarm_handler():
+    try:
+        sim = sim
+        ts = sim.datetime()
+        sim.sendSMS(message=f'{ts} Alarm Is Triggered ')
+    except:
+        try:
+            sim = sim
+            ts = sim.datetime()
+            sim.sendSMS(message=f'{ts}Alarm Is Triggered')
+        except:
+            print('cant send message')
+    print('\n  +++++ Alarm Pass Function Triggered! ++++\n')
+
+    # else:
+    #     print('Time is Correct')
+# try:
+#     print('1st Time importing Clock Object')
+#     clock = Clock(sqw_pin=clock_sqw,scl_pin=clock_scl,sda_pin=clock_sda,handler_alarm=alarm_handler,alarm_time=alarm)
+# except Exception as e:
+#     try:
+#         print('2nd Time importing Clock Object')
+#         clock = Clock(sqw_pin=clock_sqw,scl_pin=clock_scl,sda_pin=clock_sda,handler_alarm=alarm_handler,alarm_time=alarm)
+#     except Exception as e:
+#         print('Cant create Clock Reason: ',e)
+# time.sleep(2)
+
+
+
+class RFIDReader:
+    def __init__(self, file_path=None):
+        # resetPin()
+        if file_path is None:
+            file_path = 'rdm6300.json'
         self.file_path = file_path
         self.light = LEDSignal(doorservoPin)
+        self.gothread = True
+        self.rxPin = doorPin
         try:
             self.data = self.read()
         except:
             self.data = {}
             self.save
             self.data = self.read()
-
+        self.processing = None
+        if RTC().datetime()[0] < 2022:
+            print('Updating Datetime()')
+            self.sim = isim()
+            updateClock(RTC(), self.sim, ismachine=True)
+        self.timer = Timer(2)
+        self.timer.init(period=3600000, mode=Timer.PERIODIC, callback=self.selftimer)
+    def selftimer(self):
+        ch = RTC().datetime()[4]
+        if ch >= 12:
+            print('time is 12 noon stopping RFID Reading')
+            self.gothread = False
+            self.timer.deinit()
+            time.sleep(2)
+            deepsleep(5000)
+        # try:
+        #     self.sim = sim
+        # except Exception as e:
+        #     print('Error in sim object')
+        #     self.sim = None
+        # self.result = 0
+        print('To Start reading run scan()')
+    def hasData(self):
+        if not bool(self.data):
+            print("The dictionary is empty.")
+            return False
+        else:
+            print("The dictionary is not empty.")
+            return True
     @property
     def save(self):
         try:
@@ -43,24 +269,42 @@ class JsonHandler:
             print(f"Error writing JSON: {e}")
             return True
     def add_maker(self):
-        time.sleep(5)
-        return time.time()
+        # return
+        # self.result = self.sim.datetime()
+        return real_time(RTC().datetime())
+        # return self.result
+        # if self.sim is not None:
+        #     return self.sim.datetime()
+        # try:
+        #     return self.sim.datetime()
+        # except:
+        #     return 0
+        # time.sleep(5)
+        # return time.time()
 
     def add(self, rf_id, initial_count=1):
         """Add new card or update existing card in JSON file"""
         try:
+            
+            # _thread.start_new_thread(self.add_maker, ())
             if rf_id not in self.data:
                 self.data[rf_id] = {
+                    "id": rf_id,
                     "entry_count": initial_count,
-                    "entries": {initial_count: _thread.start_new_thread(self.add_maker, ())},
-                    "last_seen": time.time(),
+                    "entries": {initial_count: self.add_maker()},
+                    "last_seen": self.add_maker(),
                     "inside": True
+
                 }
             else:
                 self.data[rf_id]["entry_count"] += 1
-                self.data[rf_id]["entries"].update({self.data[rf_id]["entry_count"]: time.time()})
-                self.data[rf_id]["last_seen"] = time.time()
+                self.data[rf_id]["entries"].update({self.data[rf_id]["entry_count"]: self.add_maker()})
+                self.data[rf_id]["last_seen"] = self.add_maker()
                 self.data[rf_id]["inside"] = True
+            
+            _thread.start_new_thread(self.inform, (self.data[rf_id],))
+            
+            # self.inform(self.data[rf_id])
         except Exception as e:
             print(f"Error adding card: {e}")
             return False
@@ -76,57 +320,97 @@ class JsonHandler:
                 json.dump(default_data if default_data is not None else {}, file, indent=4)
                 data = default_data if default_data is not None else {}
         return data
-j  = JsonHandler('data.json')
+    def inform(self,d):
+        if self.processing == d['id']:
+            print("passing multiple same id ")
+            return
+        self.processing = d['id']
+        # if d['id']  in rfidTags:
+        #     # TODO ADD FUNC TO confirm tag
+        time.sleep(1)
+        print(f"informed RFID: {d} \n")
+        self.gothread = False
+        ec = 0
+        for _ in d["entries"]:
+            ec+=1
+        s = f'{d["id"]} arrived: {d["last_seen"]} count {ec}\n'
+        time.sleep(1)
+        resetPin()
+        self.sim = isim()
+        # sms_json = ujson.dumps(d).encode()
+        sms_json = s.encode()
+        self.sim.sendSMS(message=sms_json)
+        time.sleep(1)
+        self.sim.receiveSMS()
+        time.sleep(1)
+        for i in range(15):
+            feeder.go
+            print(f'Feeding in {i+1}/15')
+            time.sleep(0.1)
+        # TODO ADD FUNC TO FEED
+        time.sleep(1)
+        self.processing = None
+        self.gothread = True
+        self.scan()
 
-gothread = True
-def thread1():
-    print('\n     Starting thread 1....\n\n')
-    rfid1 = UART(1, baudrate=9600, rx=doorPin, timeout=10)  # Reduced timeout
-    rfid1.flush()
-    lt = ''
-    sc = 0
-    msdelay = 25  # Reduced delay to 50ms
-    def read_rfid_data(uart):
-        if uart.any():  # Check if data available
-            start = uart.read(1)
-            if start == b'\x02':
-                data = uart.read(12)
-                end = uart.read(1)
+    def scan(self):
+        resetPin()
+        gc.collect()
+        print('\n     Starting scan....\n\n')
+        time.sleep(2)
+        self.rfid1 = UART(1, baudrate=9600, rx=self.rxPin, timeout=10)  # Reduced timeout
+        self.rfid1.flush()
+        lt = ''
+        sc = 0
+        msdelay = 25  # Reduced delay to 50ms
+        def read_rfid_data(uart):
+            if uart.any():  # Check if data available
+                start = uart.read(1)
+                if start == b'\x02':
+                    data = uart.read(12)
+                    end = uart.read(1)
+                    try:
+                        if data and len(data) == 12 and end == b'\x03':
+                            tag_hex = data[0:10].decode()
+                            return tag_hex[1:10]
+                    except:
+                        pass
+                else:
+                    try:
+                        data = uart.read(20).decode()[:9]
+                        if data and int(data[0]) >= 1 and len(data) <= 9 and ' ' not in data:
+                            return data
+                    except:
+                        pass
+            return None
+
+        print('Scanning....')
+        while self.gothread:
+            if self.rfid1.any() >10:  # Check if data available
+                rt = self.rfid1.read()[:10]
                 try:
-                    if data and len(data) == 12 and end == b'\x03':
-                        tag_hex = data[0:10].decode()
-                        return tag_hex[1:10]
+                    tag= rt.decode()
                 except:
-                    pass
+                    print('RT error', rt)
+                    tag = None
+     
             else:
-                try:
-                    data = uart.read(20).decode()[:9]
-                    if data and int(data[0]) >= 1 and len(data) <= 9 and ' ' not in data:
-                        return data
-                except:
-                    pass
-        return None
+                tag = None
 
-    while gothread:
-        tag = read_rfid_data(rfid1)
-        if tag:
-            if tag == lt:
-                sc += 1
-                print(f'.', end='')
-                j.light.wink(0.1)
-
-                
-            else:
-                lt = tag
-                print(f'\nTAG: {tag}')
-                j.add(tag)
-                print('r', end='')
-                j.save
-                sc = 0
-                
-        time.sleep_ms(msdelay)  # Reduced sleep time
-    
-    print('Ending thread....')
+            if tag:
+                if tag == lt:
+                    sc += 1
+                    print(f'.', end='')
+                    self.light.wink(0.1)
+                else:
+                    lt = tag
+                    print(f'\nTAG: {tag}')
+                    self.add(tag)
+                    print('r', end='')
+                    self.save
+                    sc = 0
+            time.sleep_ms(msdelay)  # Reduced sleep time
+        print('Ending thread....')
 
 
 
@@ -153,24 +437,9 @@ feedblink = 119
 flyblink = 419
 ledlight = LEDSignal(ledsignalPin)
 ledlight.wink()
-sim = Sim(uart_num=sim_uart, tx=sim_tx,rx=sim_rx)
 
-def alarm_handler():
-    try:
-        sim = sim
-        ts = sim.datetime()
-        sim.sendSMS(message=f'{ts} Alarm Is Triggered ')
-    except:
-        try:
-            sim = sim
-            ts = sim.datetime()
-            sim.sendSMS(message=f'{ts}Alarm Is Triggered')
-        except:
-            print('cant send message')
-    print('\n  +++++ Alarm Pass Function Triggered! ++++\n')
 
-clock = Clock(sqw_pin=clock_sqw,scl_pin=clock_scl,sda_pin=clock_sda,handler_alarm=alarm_handler,alarm_time=alarm)
-time.sleep(2)
+
 
 
 
@@ -179,10 +448,11 @@ import gc
 import os
 import json
 import urequests
-for i in range(4):
-    print(f'Updated from github v4{i}')
-    time.sleep(1)
+# for i in range(4):
+#     print(f'Updated from github v4{i}')
+#     time.sleep(1)
 class OTAUpdater:
+    gc.collect()
     ledlight.start(100)
     giturl = "https://github.com/dayojohn19/esp_supermini/"
     def __init__(self, repo_url=giturl, filenames=files_to_update):
@@ -261,7 +531,9 @@ class OTAUpdater:
                 print(f'            {url}')
                 self.firmware_urls.append(url)
             for i in range(len(self.firmware_urls)):
+                time.sleep(1)
                 gc.collect()
+                time.sleep(1)
                 try:
                     if self.fetch_latest_code(self.firmware_urls[i]):
                         self.update_no_reset() 
@@ -299,22 +571,6 @@ class OTAUpdater:
 
 
 
-
-
-class Power:
-    def __init__(self,pin = groundPin):
-        self.pin = Pin(pin,Pin.OUT)
-        self.power = False
-    @property
-    def on(self):
-        self.pin.value(1)
-        self.power = True
-    @property
-    def off(self):
-        self.pin.value(0)
-        self.power = False
-
-gnd = Power(groundPin) # whole ground Pin
 # gnd.on
 
 class Wake():
@@ -327,7 +583,7 @@ class Wake():
             return 'deepsleep'
         else:
             print('     unknwon')
-            return 'unknown'
+            return cause
 wake = Wake()
 
 def textWriter(fileName=None, toWrite=None):
@@ -609,67 +865,7 @@ class FlyGate():
         return
 flygate = FlyGate()
 
-class Feeder():
-    def __init__(self,feederpin=feederpin, initFeed = 10):
-        self.servo_pin = Pin(feederpin)
-        self.servo = PWM(self.servo_pin)
-        self.servo.freq(50)
-        self.backwward = 23
-        self.stop = 0
-        self.forward = 110
-        self.slowforward = 90
-        self.initFeed=initFeed
-        self.goCount = 3
-        self.servo.duty(0)
-    def back(self):
-        gnd.on
-        time.sleep(0.01)
-        for s in range(5):
-            time.sleep(0.1)
-            self.servo.duty(self.backwward)
-            time.sleep(0.1)
-            self.servo.duty(self.stop)
-            time.sleep(0.1)
-            print(s)
-        gnd.off
-    def finish(self):
-        try:
-            self.servo.duty_u16(0)
-        except:
-            self.servo.duty(0)
-        time.sleep(1)
-        gnd.off
-    @property
-    def slow(self):
-        gnd.on
-        self.servo.duty(self.slowforward)
-        time.sleep(1.4) # One Complete rev
-        self.servo.duty(0)
-    @property
-    def go(self):
-        gnd.on
-        self.servo.duty(self.forward)
-        # time.sleep(0.636) # One Complete Revolution
-        time.sleep(0.16) # One Complete Revolution
-        # time.sleep(0.32) # One Complete Revolution
-        self.servo.duty(0)
 
-# def tester(ms=1):
-#     feeder.servo.duty(feeder.forward)
-#     time.sleep(ms)
-#     feeder.servo.duty(0)
-        # time.sleep(1)
-        # time.sleep(1)
-        # for i in range(10):
-        #     print(f'Initial Feeding in {i+1}/{self.goCount}')
-        #     time.sleep(0.4)
-        #     self.servo.duty(self.forward)
-        #     time.sleep(0.05)
-        #     self.servo.duty_u16(self.stop)
-        #     time.sleep(0.4)
-        # time.sleep(0.1)
-        # self.servo.duty_u16(0)
-feeder = Feeder()
 
 
 class Train():
@@ -745,29 +941,6 @@ t = Train()
             
 
 
-
-def date_to_tuple(datestr):
-    """
-    from sim.datetime() to updating ds3231 time
-    """
-    date_str = datestr
-    month_map = {'January': 1, 'February': 2, 'March': 3, 'April': 4, 'May': 5,'June': 6, 'July': 7, 'August': 8, 'September': 9, 'October': 10,'November': 11, 'December': 12}
-    date_parts = date_str.split(', ')
-    month_name = date_parts[0]
-    day, year = date_parts[1].split(' ')
-    month = month_map[month_name]
-    day = int(day)
-    year = int(year)
-    time_parts, am_pm = date_parts[2].split(' ')
-    hour, minute, second = map(int, time_parts.split(':'))
-    if am_pm == 'PM' and hour != 12:
-        hour += 12
-    elif am_pm == 'AM' and hour == 12:
-        hour = 0
-    date_tuple = (year, month, day, hour, minute, second, 0)
-    return date_tuple #(0-year, 1-month, 2-day, 3-hour, 4-minutes[, 5-seconds[, 6-weekday]])
-
- 
 
 
 def alert_user(alertmessage):
@@ -882,20 +1055,29 @@ try:
 
         def isDaytime(self):
             try: 
-                clock_i2c = SoftI2C(scl=Pin(clock_scl), sda=Pin(clock_sda))
-                self.clock = DS3231(clock_i2c)
+                self.clock = Clock(sqw_pin=clock_sqw,scl_pin=clock_scl,sda_pin=clock_sda,handler_alarm=alarm_handler,alarm_time=alarm)
+                # clock_i2c = SoftI2C(scl=Pin(clock_scl), sda=Pin(clock_sda))
+                # self.clock = DS3231(clock_i2c)
                 try: 
-                    if self.clock.OSF():
-                        newTime = self.sim.datetime()
-                        updatedt = date_to_tuple(newTime)
-                        self.clock.datetime((updatedt))
-                        print('+++ Time Updated ++++')
-                    else:
-                        print('Time is Correct')
+                    updateClock(self.clock.clock , self.sim)
+                    # if self.clock.OSF():
+                    #     newTime = self.sim.datetime()
+                    #     updatedt = date_to_tuple(newTime)
+                    #     self.clock.datetime((updatedt))
+                    #     print('+++ Time Updated ++++')
+                    # else:
+                    #     print('Time is Correct')
                 except Exception as e:
                     print("Error : ",e)                
                 ch = self.clock.datetime()[4]
-                if 7 <= ch < 17: 
+                if 7 <= ch < 11:
+                    mode= 'toss' #TODO add func changing mode when texted
+                    if mode == 'toss':
+                        print('Daytime True')
+                        self.train = Train()
+                        self.train.session(1,60,20)
+                        print('\    ++++    nStarting to Receive RFID ++\n')
+                if 11 <= ch < 17: 
                     if self.moduleSleepTime == 0:
                         self.moduleSleepTime = 60000
                     print('Daytime True')
@@ -922,7 +1104,7 @@ print('\n----------- \n  ')
 
 try:
     print('trying to update')
-    af = AutoFeeder()
+    # af = AutoFeeder()
     gnd.on
     ic = connect_or_create_wifi()
     ou = OTAUpdater()

@@ -130,7 +130,9 @@ class Sim():
             # self.write("ATE0\r")
             self.write(f'AT+CMGS=\"+{number}\"\r')
             # self.write("ATE1\r")
+            # self.uart.write(message)
             self.uart.write(message)
+            time.sleep(1)
             self.uart.read()
             time.sleep(1)
             self.uart.write(bytes([26])) # stop the SIM Module for SMS
@@ -190,6 +192,7 @@ class Sim():
         ]
         month_name = months[int(month) - 1]
         formatted_time = "{}, {} 20{}, {:02}:{:02}:{:02} {}".format(month_name, day, year, hour, minute, second, period)
+        
         return formatted_time
 
 
@@ -240,6 +243,7 @@ class Sim():
                     print('Found New Message')
                     print('ID: ',l[7])
                     response_str = self.write(f'AT+CMGR={l[7]}\r')
+                    break
                 elif l.startswith("+CMGL:"):
                     i = l.split(",")[0].split(':')[1].strip()
                     response_str = self.write(f'AT+CMGR={i}\r')

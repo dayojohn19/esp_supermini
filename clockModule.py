@@ -57,7 +57,11 @@ class DS3231:
         Always sets or returns in 24h format, converts to 24h if clock is set to 12h format
         datetime : tuple, (0-year, 1-month, 2-day, 3-hour, 4-minutes[, 5-seconds[, 6-weekday]])"""
         if datetime is None:
-            self.i2c.readfrom_mem_into(self.addr, DATETIME_REG, self._timebuf)
+            try:
+                self.i2c.readfrom_mem_into(self.addr, DATETIME_REG, self._timebuf)
+            except Exception as e:
+                print('Error in reading time',e)
+                return
             # 0x00 - Seconds    BCD
             # 0x01 - Minutes    BCD
             # 0x02 - Hour       0 12/24 AM/PM/20s BCD
@@ -317,7 +321,27 @@ class Clock:
         date = "{}/{}/{}".format(self.clock.datetime()[1], self.clock.datetime()[2], self.clock.datetime()[0])
         time = "{}:{}:{}".format(self.clock.datetime()[4], self.clock.datetime()[5], self.clock.datetime()[6])
         return [date, time]
-
+    def real_time(self):
+        time_tuple = self.clock.datetime()
+        month_names = ["January", "February", "March", "April", "May", "June",
+               "July", "August", "September", "October", "November", "December"]
+        year = time_tuple[0]
+        month = time_tuple[1]
+        day = time_tuple[2]
+        hour = time_tuple[4]
+        minute = time_tuple[5]
+        second = time_tuple[6]
+        if hour >= 12:
+            period = "PM"
+            if hour > 12:
+                hour -= 12
+        else:
+            period = "AM"
+            if hour == 0:
+                hour = 12  # Midnight case
+        formatted_time = '{} {}, {} {:02}:{:02}:{:02} {}'.format(
+            month_names[month - 1], day, year, hour, minute, second, period)
+        return formatted_time
 
     def setup_pins(self):
         import esp32
@@ -363,6 +387,7 @@ class Clock:
                 return True
             else:
                 print('Not Confirmed')
+
                 return minute_diff
                 
         if not confirm_alarm(self.clock.datetime(), self.min):
