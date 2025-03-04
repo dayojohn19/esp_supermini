@@ -18,6 +18,7 @@ import socket
 import ujson
 import json
 import os
+scanUntil = 12
 """
 # Sample receiveSMS
 return ['test command fiirst - +639765514253 [ 25/03/04 14:41:59 +32 ] - +639765514253 [ 25/03/04 14:41:59 +32 ]', '+639765514253']
@@ -112,6 +113,43 @@ class Feeder():
         # time.sleep(0.32) # One Complete Revolution
         self.servo.duty(0)
 feeder = Feeder()
+class Battery():
+    def __init__(self):
+        from configs.configs import batteryPin,BatteryMotorPin
+        print('Building Battery')
+        self.BatteryMotorPin = BatteryMotorPin
+        self.batteryPin = batteryPin
+        self.record
+    @property
+    def record(self):
+        bat = f'Motor: {self.motor}% \nModule: {self.module}%'
+        textWriter('battery.txt',bat)
+        return bat
+
+    @property
+    def motor(self):
+        return self.battery(self.BatteryMotorPin,3,4095,min_reading=2795)
+    @property
+    def module(self):
+        return self.battery(self.batteryPin,3)
+    def battery(self,pin, atten=3,max_reading=4095, min_reading=13):
+        a = ADC(Pin(pin)) 
+        a.atten(atten)
+        def read(a):
+            num_samples = 100  # Number of samples to average
+            total = 0 
+            for _ in range(num_samples):
+                total += a.read()
+                time.sleep(0.01)     
+            v = total / num_samples        
+            return v 
+        def percent(value, bn=min_reading, bm=max_reading, new_min=0, new_max=100):
+            return int(((value - bn) / (bm - bn)) * (new_max - new_min) + new_min    )
+        raw = read(a)
+        bat = percent(raw)
+        print(f'{bat} %     Reading: {raw}')
+        return bat
+baty = Battery()
 
 def resetPin():
     pins = [20, 21, 4, 7, 6,5,10]
@@ -248,11 +286,14 @@ class RFIDReader:
             self.sim = isim()
             updateClock(RTC(), self.sim, ismachine=True)
         self.timer = Timer(2)
-        self.timer.init(period=3600000, mode=Timer.PERIODIC, callback=self.selftimer)
-    def selftimer(self):
+        # self.timer.init(period=3600000, mode=Timer.PERIODIC, callback=self.selftimer)
+        self.timer.init(period=1800000, mode=Timer.PERIODIC, callback=self.selftimer)
+    def selftimer(self, timer=None):
         print('Checking Time 2')
+        bat = baty.record
+        print('Battery: ',bat)
         ch = RTC().datetime()[4]
-        if ch >= 14:
+        if ch <= scanUntil:
             print('time is 12 noon stopping RFID Reading')
             self.gothread = False
             self.timer.deinit()
@@ -301,6 +342,10 @@ class RFIDReader:
         self.light.wink(0.5)
         """Add new card or update existing card in JSON file"""
         try:
+            if self.processing == rf_id:
+                print("passing multiple same id ")
+                return
+            self.processing = rf_id     
             
             # _thread.start_new_thread(self.add_maker, ())
             if rf_id not in self.data:
@@ -323,11 +368,13 @@ class RFIDReader:
             gc.collect()
             time.sleep(1)
             self.save
+            
             time.sleep(1)
             gc.collect()
             time.sleep(1)
-            self.inform(self.data[rf_id])
-            time.sleep(1)
+            
+            return self.inform(self.data[rf_id])
+            # time.sleep(1)
             # for i in range(15):
             #     feeder.go
             #     print(f'Feeding in {i+1}/15')
@@ -350,20 +397,18 @@ class RFIDReader:
         return data
     def inform(self,d):
         gc.collect()
-        if self.processing == d['id']:
-            print("passing multiple same id ")
-            return
-        self.processing = d['id']
         # if d['id']  in rfidTags:
         #     # TODO ADD FUNC TO confirm tag
         time.sleep(1)
         print(f"informed RFID: {d} \n")
-        self.gothread = False
+        # self.gothread = False
         ec = 0
         for _ in d["entries"]:
             ec+=1
         s = f'{d["id"]} arrived: {d["last_seen"]} count {ec}'
         time.sleep(1)
+        self.gothread = False
+        time.sleep(2)
         resetPin()
         time.sleep(2)
         gc.collect()
@@ -381,16 +426,62 @@ class RFIDReader:
         time.sleep(1)
         gc.collect()
         # time.sleep(10)
+        time.sleep(1)
+        self.gothread = True
+        time.sleep(1)
         for i in range(15):
             feeder.go
             print(f'Feeding in {i+1}/15')
             time.sleep(0.1)
         # TODO ADD FUNC TO FEED
         time.sleep(1)
-        self.processing = None
-        self.gothread = True
-        self.scan()
+        print(f"Prcessing {self.processing}  current {d['id']}")
+        if self.processing == d['id']:
+            self.processing = None
+        return
+        # self.gothread = True
+        # self.scan()
+    def whenTrue(self):
+        print('True Again')
+        sc = 0
+        lt = ''
+        msdelay = 25 
+        while self.gothread:
+            if self.rfid1.any() >10:  # Check if data available
+                rt = self.rfid1.read()[:10]
+                try:
+                    tag= rt.decode()
+                except:
+                    print('RT error', rt)
+                    tag = None
+    
+            else:
+                tag = None
 
+            if tag:
+                if tag == lt:
+                    sc += 1
+                    print(f'.', end='')
+                    self.light.wink(0.1)
+                else:
+                    lt = tag
+                    print(f'\nThreading Add TAG: {tag}')
+                    _thread.start_new_thread(self.add,(tag,))
+                    # self.add(tag)
+                    print('r', end='')
+                    sc = 0
+            time.sleep_ms(msdelay)  # Reduced sleep time        
+        print('Thread goes false')
+        return
+    def whenFalse(self):
+        print('False Again')
+        i=0
+        while self.gothread == False:
+            i+=1
+            print("                                     waiting", i)
+            time.sleep(1)
+        print('Thread goes true')
+        return
     def scan(self):
         resetPin()
         gc.collect()
@@ -398,9 +489,21 @@ class RFIDReader:
         time.sleep(2)
         self.rfid1 = UART(1, baudrate=9600, rx=self.rxPin, timeout=10)  # Reduced timeout
         self.rfid1.flush()
-        lt = ''
-        sc = 0
-        msdelay = 25  # Reduced delay to 50ms
+
+        print('Scanning....')
+
+        while True:
+            if self.gothread:
+                self.whenTrue()
+            else:
+                self.whenFalse()
+                print('Re Initiating Scan')
+                return  self.scan()
+
+
+        print('Ending Scan....')        
+        
+         # Reduced delay to 50ms
         # def read_rfid_data(uart):
         #     if uart.any():  # Check if data available
         #         start = uart.read(1)
@@ -422,33 +525,6 @@ class RFIDReader:
         #                 pass
         #     return None
 
-        print('Scanning....')
-        while self.gothread:
-            if self.rfid1.any() >10:  # Check if data available
-                rt = self.rfid1.read()[:10]
-                try:
-                    tag= rt.decode()
-                except:
-                    print('RT error', rt)
-                    tag = None
-     
-            else:
-                tag = None
-
-            if tag:
-                if tag == lt:
-                    sc += 1
-                    print(f'.', end='')
-                    self.light.wink(0.1)
-                else:
-                    lt = tag
-                    print(f'\nTAG: {tag}')
-                    _thread.start_new_thread(self.add(tag),(tag,))
-                    # self.add(tag)
-                    print('r', end='')
-                    sc = 0
-            time.sleep_ms(msdelay)  # Reduced sleep time
-        print('Ending thread....')
 
 
 
@@ -715,42 +791,6 @@ def connect_or_create_wifi():
 
 
 time.sleep(2)
-class Battery():
-    def __init__(self):
-        from configs.configs import batteryPin,BatteryMotorPin
-        print('Building Battery')
-        self.BatteryMotorPin = BatteryMotorPin
-        self.batteryPin = batteryPin
-        self.record
-    @property
-    def record(self):
-        bat = f'Motor: {self.motor}% \nModule: {self.module}%'
-        textWriter('battery.txt',bat)
-        return bat
-
-    @property
-    def motor(self):
-        return self.battery(self.BatteryMotorPin,3,4095,min_reading=2795)
-    @property
-    def module(self):
-        return self.battery(self.batteryPin,3)
-    def battery(self,pin, atten=3,max_reading=4095, min_reading=13):
-        a = ADC(Pin(pin)) 
-        a.atten(atten)
-        def read(a):
-            num_samples = 100  # Number of samples to average
-            total = 0 
-            for _ in range(num_samples):
-                total += a.read()
-                time.sleep(0.01)     
-            v = total / num_samples        
-            return v 
-        def percent(value, bn=min_reading, bm=max_reading, new_min=0, new_max=100):
-            return int(((value - bn) / (bm - bn)) * (new_max - new_min) + new_min    )
-        raw = read(a)
-        bat = percent(raw)
-        print(f'{bat} %     Reading: {raw}')
-        return bat
 
 
 
@@ -1119,7 +1159,7 @@ try:
                     print("Isdaytime Error : ",e)                
                 ch = self.clock.clock.datetime()[4]
                 print(f' is Daytime? current Time: {ch} getting four of {self.clock.clock.datetime()}')
-                if 7 <= ch < 16:
+                if 6 <= ch < scanUntil:
                     mode= 'toss' #TODO add func changing mode when texted
                     if mode == 'toss':
                         print(f'Daytime True Mode: {mode}')
@@ -1131,7 +1171,7 @@ try:
                         time.sleep(1)
                         self.scan.scan()
                         return True
-                if 16 <= ch < 17: 
+                if scanUntil <= ch < 17: 
                     print('Just recurssiontime is current time is btwn 11 n 17')
                     if self.moduleSleepTime == 0:
                         self.moduleSleepTime = 60000
@@ -1141,8 +1181,8 @@ try:
             
             # try: self.clock = Clock(sqw_pin=clock_sqw,scl_pin=clock_scl,sda_pin=clock_sda,handler_alarm=alarm_handler,alarm_time=alarm)
             except Exception as e:
-                print('Error Cant import clock reason: ',e)
-                textWriter('error.txt','Clock Error')
+                print('Error Cant import  reason: ',e)
+                textWriter('error.txt',e)
 
             return False
     
@@ -1165,7 +1205,13 @@ try:
     ou = OTAUpdater()
     af = AutoFeeder()
 
-except Exception as e: print("Error Main", "   Reason: ",e)
+except Exception as e: 
+    print("Error Main", "   Reason: ",e)
+    print('Resetting in 10')
+    for i in range(10):
+        time.sleep(1)
+    reset()
+
 # gnd.on
 time.sleep(1)
 
