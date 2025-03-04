@@ -1104,10 +1104,10 @@ print('\n----------- \n  ')
 
 try:
     print('trying to update')
-    # af = AutoFeeder()
     gnd.on
     ic = connect_or_create_wifi()
     ou = OTAUpdater()
+    af = AutoFeeder()
 
 except Exception as e: print("Error COnnecting to network!", "   Reason: ",e)
 # gnd.on
