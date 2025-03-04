@@ -292,7 +292,7 @@ class Clock:
         self.clock = DS3231(self.clock_i2c)
         self.enable_32kHz_output(False)
         self.rtc = RTC()
-        self.setup_pins()
+        
         # print("Manually Checking Alarm")
         print('\n\n --- Manual Checking ALARM -- ')
         if self.clock.check_alarm(1):
@@ -310,6 +310,7 @@ class Clock:
         print(' +++ Manual Checking DONE  +++ \n')
         self.alarm_daily(self.amhr,self.min)
         self.alarm2_daiy(self.pmhr,self.min)        
+        self.setup_pins()
         self.sync_rtc_with_ds3231()
 
     def sync_rtc_with_ds3231(self):
