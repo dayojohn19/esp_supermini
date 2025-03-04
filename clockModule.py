@@ -367,6 +367,16 @@ class Clock:
         if (new_time - triggered_time) < 500:
             return        
         triggered_time = new_time
+        isgoing = False
+        if (self.clock.check_alarm(1)):
+            print('alarm1: True')
+            isgoing = True
+        elif (self.clock.check_alarm(2)):
+            print('alarm2:  True')
+            isgoing = True
+        if isgoing == False:
+            print('No Alarm Saw')
+            return
         def confirm_alarm(currentdate, alarm_min):
             print('Confirming Alarm')
             """
@@ -391,15 +401,14 @@ class Clock:
 
                 return minute_diff
                 
-        if not confirm_alarm(self.clock.datetime(), self.min):
+        if  confirm_alarm(self.clock.datetime(), self.min) != True:
             print('     Sorry Alarm Pin Triggered at wrong Time')
             return
         time.sleep(2)
         print('Alarming     Pin Trigger handler_SQL()')
         print(f"[ {self.get_time()[1]} ]SQW Interrupt Triggered by PIN:", pin)
         self.enable_32kHz_output(True)
-        print('alarm1: ',self.clock.check_alarm(1))
-        print('alarm2:  ',self.clock.check_alarm(2))
+
         # if self.clock.check_alarm(1):
         #     print('\n       ALARM 1 ')
         #     self.passed_handler_alarm()

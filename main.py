@@ -54,9 +54,16 @@ def updateClock(c,s, ismachine=False):
         c = c.clock
     # if c.OSF():
     newTime = s.datetime()
-    updatedt = date_to_tuple(newTime, ismachineRTC=ismachine)
-    c.datetime((updatedt))
+    if c.datetime()[0] < 2022:
+        print(f'Clock Time not Updated {c.datetime()}')
+        updatedt = date_to_tuple(newTime, ismachineRTC=ismachine)
+        c.datetime((updatedt))
+    if c.datetime()[0] < 2022:
+        print('Cant Update Sim no SIgnal')
+        time.sleep(3)
+        return False
     print('+++ Time Updated ++++')
+    return True
 class Feeder():
     def __init__(self,feederpin=feederpin, initFeed = 10):
         self.servo_pin = Pin(feederpin)
@@ -112,7 +119,8 @@ def resetPin():
         for pin_num in pins:
             time.sleep(0.1)
             try:
-                pin = Pin(pin_num, Pin.IN, Pin.PULL_DOWN)  # Set the pin to input mode
+                pin = Pin(pin_num, Pin.IN)  # Set the pin to input mode
+                pin.irq(handler=None)
                 pin.value(0)  # Ensure the pin value is reset to low (0)
                 print(f"GPIO{pin_num} reset to input mode with low value")
             except ValueError:
@@ -166,8 +174,11 @@ def isim():
     time.sleep(1)
     gnd = Power(groundPin) # whole ground Pin
     gnd.on
+    print('waiting for sim to stabilize')
+    time.sleep(6)
     while time.time() - st < 10:
         sim = Sim(uart_num=sim_uart, tx=sim_tx,rx=sim_rx)
+        time.sleep(2)
         if sim is not None:
             break
     return sim
@@ -184,14 +195,14 @@ def isim():
 #         sim = Sim(uart_num=sim_uart, tx=sim_tx,rx=sim_rx)
 #     except Exception as e:
 #         print('Error in Sim Object: ',e)
-def alarm_handler():
+def alarm_handler(simobj):
     try:
-        sim = sim
+        sim = simobj
         ts = sim.datetime()
         sim.sendSMS(message=f'{ts} Alarm Is Triggered ')
     except:
         try:
-            sim = sim
+            sim = simobj
             ts = sim.datetime()
             sim.sendSMS(message=f'{ts}Alarm Is Triggered')
         except:
@@ -236,8 +247,9 @@ class RFIDReader:
         self.timer = Timer(2)
         self.timer.init(period=3600000, mode=Timer.PERIODIC, callback=self.selftimer)
     def selftimer(self):
+        print('Checking Time 2')
         ch = RTC().datetime()[4]
-        if ch >= 12:
+        if ch >= 14:
             print('time is 12 noon stopping RFID Reading')
             self.gothread = False
             self.timer.deinit()
@@ -263,7 +275,7 @@ class RFIDReader:
             with open(self.file_path, 'w') as file:
                 json.dump(self.data, file)
             print(f"Successfully wrote to {self.file_path}")
-            self.light.wink(0.5)
+            
             return True
         except Exception as e:
             print(f"Error writing JSON: {e}")
@@ -283,6 +295,7 @@ class RFIDReader:
         # return time.time()
 
     def add(self, rf_id, initial_count=1):
+        self.light.wink(0.5)
         """Add new card or update existing card in JSON file"""
         try:
             
@@ -302,8 +315,20 @@ class RFIDReader:
                 self.data[rf_id]["last_seen"] = self.add_maker()
                 self.data[rf_id]["inside"] = True
             
-            _thread.start_new_thread(self.inform, (self.data[rf_id],))
-            
+            # _thread.start_new_thread(self.inform, (self.data[rf_id],))
+            time.sleep(1)
+            gc.collect()
+            time.sleep(1)
+            self.save
+            time.sleep(1)
+            gc.collect()
+            time.sleep(1)
+            self.inform(self.data[rf_id])
+            time.sleep(1)
+            # for i in range(15):
+            #     feeder.go
+            #     print(f'Feeding in {i+1}/15')
+            #     time.sleep(0.5)
             # self.inform(self.data[rf_id])
         except Exception as e:
             print(f"Error adding card: {e}")
@@ -321,6 +346,7 @@ class RFIDReader:
                 data = default_data if default_data is not None else {}
         return data
     def inform(self,d):
+        gc.collect()
         if self.processing == d['id']:
             print("passing multiple same id ")
             return
@@ -333,16 +359,25 @@ class RFIDReader:
         ec = 0
         for _ in d["entries"]:
             ec+=1
-        s = f'{d["id"]} arrived: {d["last_seen"]} count {ec}\n'
+        s = f'{d["id"]} arrived: {d["last_seen"]} count {ec}'
         time.sleep(1)
         resetPin()
+        time.sleep(2)
+        gc.collect()
+        # def textme():
+        print('     start Textme')
         self.sim = isim()
-        # sms_json = ujson.dumps(d).encode()
-        sms_json = s.encode()
-        self.sim.sendSMS(message=sms_json)
+        # sms_json = s.encode()
+        # sms_json = ujson.dumps(s).encode()
+        # self.sim.sendSMS(message=sms_json)
+        self.sim.sendSMS(message=s)
         time.sleep(1)
         self.sim.receiveSMS()
+        print('     End Textme')
+        # _thread.start_new_thread(textme, ())
         time.sleep(1)
+        gc.collect()
+        # time.sleep(10)
         for i in range(15):
             feeder.go
             print(f'Feeding in {i+1}/15')
@@ -407,7 +442,6 @@ class RFIDReader:
                     print(f'\nTAG: {tag}')
                     self.add(tag)
                     print('r', end='')
-                    self.save
                     sc = 0
             time.sleep_ms(msdelay)  # Reduced sleep time
         print('Ending thread....')
@@ -963,9 +997,13 @@ def alert_user(alertmessage):
 #     runServo()
 #     time.sleep(1)
 
+text_commands = {
+    'battery': 'add func battery'
+}
 try:    
     class AutoFeeder():
         def __init__(self): 
+            print('Starting Auto Feeder')
             # self.moduleSleepTime = 30* 60 
             self.moduleSleepTime = 7200000 # 2hrs
             try: 
@@ -975,7 +1013,7 @@ try:
             try: 
                 try:
                     time.sleep(2)
-                    self.sim = sim
+                    self.sim = isim()
                 except Exception as e:
                     print('Error first importing Sim: ',e)
                     # try: self.sim = Sim(uart_num=sim_uart, tx=sim_tx,rx=sim_rx)
@@ -991,8 +1029,9 @@ try:
             except Exception as e: print("Sim ERROR ",e)
 
             if self.isDaytime() == False:
+                print('Daytime returned False')
             # if self.isDaytime() == True:
-                self.clock = clock
+                # self.clock = clock
                 print('Going TO sleep')
                 for i in range(10):
                     time.sleep(1)
@@ -1047,19 +1086,24 @@ try:
                 machine.deepsleep(self.moduleSleepTime)
             else:
                 print('Need Wake Reason == deepsleep to start training')
-                print('Sleeping in module just been powered')
+                # print('Sleeping in module just been powered')
                 time.sleep(2)
-                import machine 
-                machine.deepsleep(5000)
+                # import machine 
+                # machine.deepsleep(5000)
 
 
         def isDaytime(self):
+            print('     Checking Datetime')
             try: 
+                time.sleep(1)
                 self.clock = Clock(sqw_pin=clock_sqw,scl_pin=clock_scl,sda_pin=clock_sda,handler_alarm=alarm_handler,alarm_time=alarm)
+                time.sleep(1)
                 # clock_i2c = SoftI2C(scl=Pin(clock_scl), sda=Pin(clock_sda))
                 # self.clock = DS3231(clock_i2c)
                 try: 
+                    time.sleep(1)
                     updateClock(self.clock.clock , self.sim)
+                    time.sleep(1)
                     # if self.clock.OSF():
                     #     newTime = self.sim.datetime()
                     #     updatedt = date_to_tuple(newTime)
@@ -1068,16 +1112,23 @@ try:
                     # else:
                     #     print('Time is Correct')
                 except Exception as e:
-                    print("Error : ",e)                
-                ch = self.clock.datetime()[4]
-                if 7 <= ch < 11:
+                    print("Isdaytime Error : ",e)                
+                ch = self.clock.clock.datetime()[4]
+                print(f' is Daytime? current Time: {ch} getting four of {self.clock.clock.datetime()}')
+                if 7 <= ch < 16:
                     mode= 'toss' #TODO add func changing mode when texted
                     if mode == 'toss':
-                        print('Daytime True')
-                        self.train = Train()
-                        self.train.session(1,60,20)
+                        print(f'Daytime True Mode: {mode}')
+                        # TODO UN COMMENT BELOW
+                        # self.train = Train()
+                        # self.train.session(1,60,20)
                         print('\    ++++    nStarting to Receive RFID ++\n')
-                if 11 <= ch < 17: 
+                        self.scan = RFIDReader()
+                        time.sleep(1)
+                        self.scan.scan()
+                        return True
+                if 16 <= ch < 17: 
+                    print('Just recurssiontime is current time is btwn 11 n 17')
                     if self.moduleSleepTime == 0:
                         self.moduleSleepTime = 60000
                     print('Daytime True')
@@ -1085,8 +1136,8 @@ try:
 
             
             # try: self.clock = Clock(sqw_pin=clock_sqw,scl_pin=clock_scl,sda_pin=clock_sda,handler_alarm=alarm_handler,alarm_time=alarm)
-            except:
-                print('Error Cant import clock')
+            except Exception as e:
+                print('Error Cant import clock reason: ',e)
                 textWriter('error.txt','Clock Error')
 
             return False
@@ -1105,11 +1156,12 @@ print('\n----------- \n  ')
 try:
     print('trying to update')
     gnd.on
+    # x = RFIDReader()
     ic = connect_or_create_wifi()
     ou = OTAUpdater()
     af = AutoFeeder()
 
-except Exception as e: print("Error COnnecting to network!", "   Reason: ",e)
+except Exception as e: print("Error Main", "   Reason: ",e)
 # gnd.on
 time.sleep(1)
 
@@ -1123,6 +1175,7 @@ time.sleep(1)
 #         print('\n\n     Please type "gnd.on"  First to power up\n\n')
 #         time.sleep(2)
 gnd.off
+time.sleep(1)
 print('sleeping in 3')
 
 # adc = ADC(0)

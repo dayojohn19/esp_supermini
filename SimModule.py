@@ -107,7 +107,11 @@ class Sim():
         isConnected = self.write('AT+CREG?\r',cmdPurpose='Check connection')
         print('Connection: ', isConnected)
         time.sleep(4)
-
+        if 'CREG: 0,2' in isConnected:
+            print('No signal')
+            time.sleep(1)
+            self.uart = self.uart
+            time.sleep(1)
         if 'CREG: 0,1' in isConnected or 'CREG: 1,1' in isConnected or 'CREG: 13,0':
             CCSignal = self.write('AT+CSQ\r',cmdPurpose='Signal Strength')
             print(f"CONNECTED Signal: {CCSignal}" )
@@ -123,24 +127,49 @@ class Sim():
 
     def sendSMS(self,number=639568543802,message="messageTemplate"): #working now
         try:
+            time.sleep(1)
             self.write("AT\r",cmdPurpose='refresh') # Hand Shake
+            time.sleep(1)
             self.write("AT+CMGF=1\r", cmdPurpose='Text Mode') # Put to Text Mode
             self.record('sms.txt',f"{self.datetime()} - Sent - {message} \n") 
+            time.sleep(1)
+            # self.record('sms.txt',f"Sent - {message}") 
             # atd.write(f'AT+CMGS=\"+639765514253\"\r')
             # self.write("ATE0\r")
+            time.sleep(1)
             self.write(f'AT+CMGS=\"+{number}\"\r')
+            time.sleep(1)
             # self.write("ATE1\r")
             # self.uart.write(message)
             self.uart.write(message)
             time.sleep(1)
-            self.uart.read()
+            response = self.uart.read()
             time.sleep(1)
             self.uart.write(bytes([26])) # stop the SIM Module for SMS
-            self.uart.read()
+            time.sleep(1)
+            response = self.uart.read()
             print('message Sent')
             return True
         except Exception as e:
-            print('Cant Send Message')
+            print('Cant Send Message, Probably no Signal', e)
+            try:
+                time.sleep(1)
+                self.uart = UART(self.uart_num,baudrate= sim_baud,tx=self.tx,rx=self.rx)
+                time.sleep(6)
+                self.write(f'AT+CMGS=\"+{number}\"\r')
+                time.sleep(1)
+                self.uart.write(message)
+                time.sleep(1)
+                self.uart.read()
+                time.sleep(1)
+                self.uart.write(bytes([26])) # stop the SIM Module for SMS
+                time.sleep(1)
+                self.uart.read()
+                time.sleep(1)
+                print('Message Sent Second time')
+                print('Trying again for second time:')
+            except Exception as e:
+                print('really cant send message')
             return False
     
 
@@ -281,8 +310,11 @@ class Sim():
 
         self.record('sms.txt', toWriteData=f'[ {self.datetime()} ] - Receive -  {str(message)} ' )
         deleteSMS()
+
         self.checkTypeOfMessage(message)
-        return  [f'{message} - {phone_number} [ {date_sms} {time_sms} ]',phone_number]
+        rcvsms = [f'{message} - {phone_number} [ {date_sms} {time_sms} ]',phone_number]
+        print('Found SMS: ',rcvsms)
+        return rcvsms
 
 
     def checkTypeOfMessage(self,messageReceived):
