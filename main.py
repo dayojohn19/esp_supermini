@@ -18,7 +18,10 @@ import socket
 import ujson
 import json
 import os
-
+"""
+# Sample receiveSMS
+return ['test command fiirst - +639765514253 [ 25/03/04 14:41:59 +32 ] - +639765514253 [ 25/03/04 14:41:59 +32 ]', '+639765514253']
+"""
 def date_to_tuple(datestr, ismachineRTC=False):
     
     """
@@ -398,26 +401,26 @@ class RFIDReader:
         lt = ''
         sc = 0
         msdelay = 25  # Reduced delay to 50ms
-        def read_rfid_data(uart):
-            if uart.any():  # Check if data available
-                start = uart.read(1)
-                if start == b'\x02':
-                    data = uart.read(12)
-                    end = uart.read(1)
-                    try:
-                        if data and len(data) == 12 and end == b'\x03':
-                            tag_hex = data[0:10].decode()
-                            return tag_hex[1:10]
-                    except:
-                        pass
-                else:
-                    try:
-                        data = uart.read(20).decode()[:9]
-                        if data and int(data[0]) >= 1 and len(data) <= 9 and ' ' not in data:
-                            return data
-                    except:
-                        pass
-            return None
+        # def read_rfid_data(uart):
+        #     if uart.any():  # Check if data available
+        #         start = uart.read(1)
+        #         if start == b'\x02':
+        #             data = uart.read(12)
+        #             end = uart.read(1)
+        #             try:
+        #                 if data and len(data) == 12 and end == b'\x03':
+        #                     tag_hex = data[0:10].decode()
+        #                     return tag_hex[1:10]
+        #             except:
+        #                 pass
+        #         else:
+        #             try:
+        #                 data = uart.read(20).decode()[:9]
+        #                 if data and int(data[0]) >= 1 and len(data) <= 9 and ' ' not in data:
+        #                     return data
+        #             except:
+        #                 pass
+        #     return None
 
         print('Scanning....')
         while self.gothread:
@@ -440,7 +443,8 @@ class RFIDReader:
                 else:
                     lt = tag
                     print(f'\nTAG: {tag}')
-                    self.add(tag)
+                    _thread.start_new_thread(self.add(tag),(tag,))
+                    # self.add(tag)
                     print('r', end='')
                     sc = 0
             time.sleep_ms(msdelay)  # Reduced sleep time
