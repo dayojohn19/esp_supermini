@@ -1,18 +1,43 @@
 
 from machine import UART, Pin # type: ignore
-from configs.configs import sim_rx,sim_tx, sim_uart, sim_baud
+from configs.configs import sim_rx, sim_tx, sim_uart, sim_baud
 import time
 # ,sim_pin
  
 
 class Sim():
     def __init__(self,uart_num=sim_uart, tx=sim_tx,rx=sim_rx,baudrate=sim_baud):
-        # self.power = Pin(sim_pin,Pin.OUT)
         self.uart_num = uart_num
         self.tx =tx
-        self.rx =rx
-        self.log_run_times=0   
+        self.rx =rx        
         self.uart = UART(self.uart_num,baudrate,tx=self.tx,rx=self.rx)
+        print('Starting Sim')
+        try:
+            print("     Checking if Sim is Connected: ",end=' ')
+            isConnected = self.write("AT\r")
+            i=0
+            s = time.time()
+            print('Checking: ',end='')
+            while not 'OK' in isConnected:
+                if time.time()-s >=20:
+                    break
+                isConnected = self.write("AT\r")
+                # self.write('ATD*99#\r\n')
+                time.sleep(1)
+                print('.',end='')
+                i+=1
+
+            if 'OK' in isConnected :
+                print('         True')   
+                return
+            print('         isConnected',isConnected)   
+        except Exception as e:
+            print('     checking Error',e)
+        # try:
+        print('     Creating Sim')
+    # self.power = Pin(sim_pin,Pin.OUT)
+        self.log_run_times=0   
+        
         self.ic = None
         self.commands = {
             'text':self.sendSMS, # text 639568543802 message
@@ -20,13 +45,21 @@ class Sim():
             # 'wifi':sendWifiConfig # wifi [NAME] [PASSWORD]
         }
         # self.power.off()
-        print('Starting Sim')
-        
         time.sleep(0.5)
         # self.power.on()
         # self.write("AT+CMGF=1\r", cmdPurpose='Text Mode') # Put to Text Mode
-        print(f"\n----SIM Checking   -----\n")
-        self.checkConnection()
+        if self.checkConnection() == False:
+            return print('Cant Connect Signal')
+
+        print('Sim Attributes: ') 
+        for attr in dir(self):
+            # Check if the attribute is callable (method) or a property
+            if (callable(getattr(self, attr)) and not attr.startswith("__")) or isinstance(getattr(self.__class__, attr, None), property):
+                print('         ',attr)     
+            time.sleep(0.1)
+        # except Exception as e:
+        #     print('Cant Initialize Sim',e)
+        #     return None
 
 
     # def sms(self):
@@ -57,120 +90,156 @@ class Sim():
             pass
 
     def connectInternet(self):
-        try:
-            self.write('AT+CSQ\r\n')
-            time.sleep(1)
-            print('Connected 1/6')
-            self.write('AT+CGDCONT=1,"IP","internet"\r\n')
-            time.sleep(1)
-            print('Connected 2/6')
-            self.write('AT+CGACT=1,1\r\n')
-            self.write('AT+CGPADDR=1\r\n')
-            print('Connected Address 3/6')
-            time.sleep(1)
-            # self.write('AT+CGDATA="PPP",1\r\n')
-            self.write('ATD*99#\r\n')
-            print('Connected 4/6')
-            time.sleep(1)            
-            import network
-            # network.WLAN().active(False)
-            ic = network.PPP(self.uart)
-            ic.active(True)
-            ic.connect()
-            print('Connected 5/6')
-            time.sleep(3)
-            if ic.isconnected():
-                print('Connected 6/6')
-            else:
-                print('waiting for connection')
-                time.sleep(10)
+        st = time.time()
+        while True:
+            print('     Trying Connecting to network')
+            if time.time() - st > 120:
+                print('Cant Check Connection')
+                return False                
+            try:
+                self.write('AT+CSQ\r\n')
+                time.sleep(1)
+                print('Connected 1/6')
+                self.write('AT+CGDCONT=1,"IP","internet"\r\n')
+                time.sleep(1)
+                print('Connected 2/6')
+                self.write('AT+CGACT=1,1\r\n')
+                self.write('AT+CGPADDR=1\r\n')
+                print('Connected Address 3/6')
+                time.sleep(1)
+                # self.write('AT+CGDATA="PPP",1\r\n')
+                self.write('ATD*99#\r\n')
+                print('Connected 4/6')
+                time.sleep(1)            
+                import network
+                # network.WLAN().active(False)
+                ic = network.PPP(self.uart)
+                ic.active(True)
+                ic.connect()
+                print('Connected 5/6')
+                time.sleep(3)
                 if ic.isconnected():
                     print('Connected 6/6')
-
                 else:
-                    print('Cant Connect')
+                    print('waiting for connection')
+                    time.sleep(10)
+                    if ic.isconnected():
+                        print('Connected 6/6')
 
-            print('Internet Connected variable  self.ic   ')
-            self.ic = ic
-            return True
+                    else:
+                        print('Cant Connect')
 
-                
-        except Exception as e:
-            print(f'Cant Connect Internet {e}')
-            return False
+                print('Internet Connected variable  self.ic   ')
+                self.ic = ic
+                return ic
+
+                    
+            except Exception as e:
+                print(f'Cant Connect Internet {e}')
+                return False
     
 
     def checkConnection(self):
-        print(' Sim Module Starting ....')
-        self.write("AT\r")
+        print('         Sim checking connection')
+        notConnected = True
         # self.write('AT+COPS=?\r', cmdPurpose='CHECK NETWORK') # 
-        isConnected = self.write('AT+CREG?\r',cmdPurpose='Check connection')
-        print('Connection: ', isConnected)
-        time.sleep(4)
-        if 'CREG: 0,2' in isConnected:
-            print('No signal')
-            time.sleep(1)
-            self.uart = self.uart
-            time.sleep(1)
-        if 'CREG: 0,1' in isConnected or 'CREG: 1,1' in isConnected or 'CREG: 13,0':
-            CCSignal = self.write('AT+CSQ\r',cmdPurpose='Signal Strength')
-            print(f"CONNECTED Signal: {CCSignal}" )
-            return True
-        else:
-            CCSignal = self.write('AT+CSQ\r')
-            print(f'Cant Connect Signal: {CCSignal}')
-            # self.write("AT+IPR=115200\r") 
-            print('Trying Again.. CHECK BAUD RATE OF SIM AND ESP')
-            self.uart = UART(self.uart_num,9600,tx=self.tx,rx=self.rx)
-            self.write('AT+CREG=1\r', cmdPurpose='Forcing to Connect')
-            self.checkConnection()
+        st = time.time()
 
-    def sendSMS(self,number=639568543802,message="messageTemplate"): #working now
-        try:
+        while notConnected:
+            print('.', end='')
+            if time.time() - st > 30:
+                print('Cant Check Connection')
+                return False
             time.sleep(1)
-            self.write("AT\r",cmdPurpose='refresh') # Hand Shake
+            self.write("AT\r")
+            isConnected = self.write('AT+CREG?\r',cmdPurpose='Check connection')
+            print('     Connection: ', isConnected)
+            if 'CREG: 0,2' in isConnected:
+                print('         No signal')
+                time.sleep(1)
+                self.uart = self.uart
+                time.sleep(1)
+                continue
+            elif 'CREG: 0,1' in isConnected or 'CREG: 1,1' in isConnected or 'CREG: 13,0':
+                CCSignal = self.write('AT+CSQ\r',cmdPurpose='Signal Strength')
+                print(f"        Signal: {CCSignal}" )
+                notConnected = False
+                return
+
+            CCSignal = self.write('AT+CSQ\r')
+            print(f'            Cant Connect Signal: {CCSignal}')
+            # self.write("AT+IPR=115200\r") 
+            print('             Changing Baud Rate to        9600')
+            self.uart = UART(self.uart_num,9600,tx=self.tx,rx=self.rx)
             time.sleep(1)
-            self.write("AT+CMGF=1\r", cmdPurpose='Text Mode') # Put to Text Mode
-            self.record('sms.txt',f"{self.datetime()} - Sent - {message} \n") 
-            time.sleep(1)
-            # self.record('sms.txt',f"Sent - {message}") 
-            # atd.write(f'AT+CMGS=\"+639765514253\"\r')
-            # self.write("ATE0\r")
-            time.sleep(1)
-            self.write(f'AT+CMGS=\"+{number}\"\r')
-            time.sleep(1)
-            # self.write("ATE1\r")
-            # self.uart.write(message)
-            self.uart.write(message)
-            time.sleep(1)
-            response = self.uart.read()
-            time.sleep(1)
-            self.uart.write(bytes([26])) # stop the SIM Module for SMS
-            time.sleep(1)
-            response = self.uart.read()
-            print('message Sent')
-            return True
-        except Exception as e:
-            print('Cant Send Message, Probably no Signal', e)
+            self.write('AT+CREG=1\r', cmdPurpose='Forcing to Connect')
+            print('     Trying Again')
+        print('     Connected')
+        if notConnected:
+            return False
+        return True
+
+
+    def sendSMS(self,message="messageTemplate",number=639568543802): #working now
+        sending = True
+        st = time.time()
+        while sending:
+            if time.time() - st > 60:
+                print('Cant Check Connection')
+                return False        
             try:
                 time.sleep(1)
-                self.uart = UART(self.uart_num,baudrate= sim_baud,tx=self.tx,rx=self.rx)
-                time.sleep(6)
+                self.write("AT\r",cmdPurpose='refresh') # Hand Shake
+                time.sleep(1)
+                self.write("AT+CMGF=1\r", cmdPurpose='Text Mode') # Put to Text Mode
+                self.record('sms.txt',f"{self.datetime()} - Sent - {message} \n") 
+                time.sleep(1)
+                # self.record('sms.txt',f"Sent - {message}") 
+                # atd.write(f'AT+CMGS=\"+639765514253\"\r')
+                # self.write("ATE0\r")
+                time.sleep(1)
                 self.write(f'AT+CMGS=\"+{number}\"\r')
                 time.sleep(1)
+                # self.write("ATE1\r")
+                # self.uart.write(message)
                 self.uart.write(message)
                 time.sleep(1)
-                self.uart.read()
+                response = self.uart.read()
                 time.sleep(1)
                 self.uart.write(bytes([26])) # stop the SIM Module for SMS
                 time.sleep(1)
-                self.uart.read()
-                time.sleep(1)
-                print('Message Sent Second time')
-                print('Trying again for second time:')
+                response = self.uart.read()
+                # if 'ERROR' in response:
+                #     print('Error sending sms')
+                #     pass
+                # else: 
+                #     print('message Sent')
+                #     pass
+                sending = False
+                return True
             except Exception as e:
-                print('really cant send message')
-            return False
+                print('Cant Send Message, Probably no Signal', e)
+                print('     Trying again')
+                self.checkConnection()
+                # try:
+                #     time.sleep(1)
+                #     self.uart = UART(self.uart_num,baudrate= sim_baud,tx=self.tx,rx=self.rx)
+                #     time.sleep(6)
+                #     self.write(f'AT+CMGS=\"+{number}\"\r')
+                #     time.sleep(1)
+                #     self.uart.write(message)
+                #     time.sleep(1)
+                #     self.uart.read()
+                #     time.sleep(1)
+                #     self.uart.write(bytes([26])) # stop the SIM Module for SMS
+                #     time.sleep(1)
+                #     self.uart.read()
+                #     time.sleep(1)
+                #     print('Message Sent Second time')
+                #     print('Trying again for second time:')
+                # except Exception as e:
+                #     print('really cant send message')
+                # return False
     
 
     def lowPowerMode(self):
@@ -197,32 +266,45 @@ class Sim():
         return [firstSubstring+1,secondSubstring]
 
     def datetime(self):
-        timetoday=self.write("AT+CCLK?\r\n")
-        x,y = self.find_1st_2nd(timetoday,'"')
-        timetoday=timetoday[x:y]
-        date_time_str, offset_str = timetoday.split('+')
-        date_time_str = date_time_str.strip()  # Remove any extra spaces
-        year, month, day, time_str = date_time_str.split('/')[0], date_time_str.split('/')[1], date_time_str.split('/')[2][:2], date_time_str.split(',')[1]
-        hour, minute, second = map(int, time_str.split(':'))  # Convert the time into integers
-        if hour >= 24:
-            hour -= 24
-        elif hour < 0:
-            hour += 24
-        period = "AM"
-        if hour >= 12:
-            period = "PM"
-            if hour > 12:
-                hour -= 12
-        elif hour == 0:
-            hour = 12  # Midnight case
-        months = [
-            "January", "February", "March", "April", "May", "June", 
-            "July", "August", "September", "October", "November", "December"
-        ]
-        month_name = months[int(month) - 1]
-        formatted_time = "{}, {} 20{}, {:02}:{:02}:{:02} {}".format(month_name, day, year, hour, minute, second, period)
-        
-        return formatted_time
+        datetime = True
+        st = time.time()
+        while datetime == True:
+            if time.time() - st > 30:
+                print('     Cant get sim.datetime')
+                return False
+            time.sleep(1)
+            try:
+                timetoday=self.write("AT+CCLK?\r\n")
+                x,y = self.find_1st_2nd(timetoday,'"')
+                timetoday=timetoday[x:y]
+                date_time_str, offset_str = timetoday.split('+')
+                date_time_str = date_time_str.strip()  # Remove any extra spaces
+                year, month, day, time_str = date_time_str.split('/')[0], date_time_str.split('/')[1], date_time_str.split('/')[2][:2], date_time_str.split(',')[1]
+                hour, minute, second = map(int, time_str.split(':'))  # Convert the time into integers
+                if hour >= 24:
+                    hour -= 24
+                elif hour < 0:
+                    hour += 24
+                period = "AM"
+                if hour >= 12:
+                    period = "PM"
+                    if hour > 12:
+                        hour -= 12
+                elif hour == 0:
+                    hour = 12  # Midnight case
+                months = [
+                    "January", "February", "March", "April", "May", "June", 
+                    "July", "August", "September", "October", "November", "December"
+                ]
+                month_name = months[int(month) - 1]
+                formatted_time = "{}, {} 20{}, {:02}:{:02}:{:02} {}".format(month_name, day, year, hour, minute, second, period)
+                
+                return formatted_time
+            except:
+                print('Fail Sim.datetime() maybe no power')
+                print('     Trying again')
+                self.checkConnection()
+
 
 
     def battery(self, logSheet='battery.txt'):
@@ -247,74 +329,119 @@ class Sim():
         self.write('AT+CPMS?', cmdPurpose="Check How Many saved message 1/4 first digit number of sms and last digit upto ")
         self.wr('AT+CPMS?')        
 
-    def receiveSMS(self):
-        self.write("AT+CMGF=1\r", cmdPurpose='Text Mode')
-        self.write('AT+CPMS="SM","SM","SM"\r\n', cmdPurpose='Config Save  sms to sim')
-        self.write('AT+CNMI=2,1,0,0,0\r\n', cmdPurpose='Ensure Auto SMS Storage to sim')
-        response_str = None
-        def checkSMS(timeout=5):
-            global response_str
+    def receiveSMS(self, longer=False):
+        try:
+            self.write("AT+CMGF=1\r", cmdPurpose='Text Mode')
+            self.write('AT+CPMS="SM","SM","SM"\r\n', cmdPurpose='Config Save  sms to sim')
+            self.write('AT+CNMI=2,1,0,0,0\r\n', cmdPurpose='Ensure Auto SMS Storage to sim')
             response_str = None
-            ncount = 0
-            rcvsms = self.uart.read()
-            while rcvsms == None and ncount < timeout:
-                ncount+=1
+            def checkSMS(timeout=5):
+                global response_str
+                response_str = None
+                ncount = 0
                 rcvsms = self.uart.read()
-                print('                     Checking SMS ',rcvsms ,ncount)
+                while rcvsms == None and ncount < timeout:
+                    ncount+=1
+                    rcvsms = self.uart.read()
+                    print('                     Checking SMS ',rcvsms ,ncount)
+                    time.sleep(1)
+                    if rcvsms != None:
+                        break                    
+                r = self.write('AT+CMGL="ALL"\r\n', cmdPurpose="Check All receive message")
+                latest = None
+                ls = r.split('\n')
+                for l in ls:
+                    if "REC UNREAD" in l:
+                        print('Found New Message')
+                        print('ID: ',l[7])
+                        response_str = self.write(f'AT+CMGR={l[7]}\r')
+                        break
+                    elif l.startswith("+CMGL:"):
+                        i = l.split(",")[0].split(':')[1].strip()
+                        response_str = self.write(f'AT+CMGR={i}\r')
+                        latest = i
+                return response_str
+            def deleteSMS():
+                r = self.write('AT+CMGL="ALL"\r\n', cmdPurpose="Check All receive message")
+                oldest = False
+                latest = None
+                ls = r.split('\n')
+                for l in ls:
+                    if l.startswith("+CMGL:"):
+                        i = l.split(",")[0].split(':')[1].strip()
+                        latest = i
+                        if oldest == False:
+                            oldest = i
+                            self.write(f"AT+CMGD={oldest},0\r\n", cmdPurpose="del oldst sms")
+                            print('Oldest Deleted')         
+            
+            response_str = checkSMS()
+            if longer:
+                if response_str == None:
+                    print('Re Check the Sim with Longer Timeout')
+                    response_str = checkSMS(10)
+            time.sleep(0.5)
+            if response_str == None:
+                print('No New Message')
+                return response_str
+            parts = response_str.split(',')
+            i = self.find_1st_2nd(parts[4],'\n')
+            date_sms = parts[3].strip('"')
+            time_sms = parts[4].split('"')[0]
+            phone_number = parts[1].strip('"')
+            message = parts[4][i[0]+1:i[1]-2]
+            message = f'{message} - {phone_number} [ {date_sms} {time_sms} ]'
+
+            self.record('sms.txt', toWriteData=f'[ {self.datetime()} ] - Receive -  {str(message)} ' )
+            deleteSMS()
+
+            self.checkTypeOfMessage(message)
+            rcvsms = [f'{message} - {phone_number} [ {date_sms} {time_sms} ]',phone_number]
+            print('Found SMS: ',rcvsms)
+            self.processSMS(rcvsms)
+            return rcvsms
+        except Exception as e:
+            print('Cant Receive SMS Error',e)
+            return None
+    def processSMS(self,sms=None):
+        if sms == None:
+            print('No New Command')
+        else:
+            print('New Command: ',sms)
+            sms  = sms[0].lower().split()
+            # if "feed" in sms[0]:
+            #     # 'feed 3'  Sample message
+            #     print('Requesting to feed', sms)
+            #     self.feed = Feeder()
+            #     for i in range(int(sms[1])):
+            #         print(f'Feeding in {i+1}/{sms[1]}')
+            #         self.feed.go
+            #         time.sleep(0.5)
+            # if "mode" in sms[0]:
+                # 'mode session'
+                # 'mode toss'
+            print(f'checking mode {sms[1]}')
+            sampleSMS = ['test command fiirst - +639765514253 [ 25/03/04 14:41:59 +32 ] - +639765514253 [ 25/03/04 14:41:59 +32 ]', '+639765514253']
+            try:
+                from settings import Settings
+                if sms[0] == 'alarm':
+                    print('Craete func that change the alarm')
+                setting = Settings(sms[0],sms[1])
+                setting.change()
+            except Exception as e:
+                print('Error Changing Mode: ',e)
+            for i in range(5):
+                print(f'sending message in {i-5}')
                 time.sleep(1)
-                if rcvsms != None:
-                    break                    
-            r = self.write('AT+CMGL="ALL"\r\n', cmdPurpose="Check All receive message")
-            latest = None
-            ls = r.split('\n')
-            for l in ls:
-                if "REC UNREAD" in l:
-                    print('Found New Message')
-                    print('ID: ',l[7])
-                    response_str = self.write(f'AT+CMGR={l[7]}\r')
-                    break
-                elif l.startswith("+CMGL:"):
-                    i = l.split(",")[0].split(':')[1].strip()
-                    response_str = self.write(f'AT+CMGR={i}\r')
-                    latest = i
-            return response_str
-        def deleteSMS():
-            r = self.write('AT+CMGL="ALL"\r\n', cmdPurpose="Check All receive message")
-            oldest = False
-            latest = None
-            ls = r.split('\n')
-            for l in ls:
-                if l.startswith("+CMGL:"):
-                    i = l.split(",")[0].split(':')[1].strip()
-                    latest = i
-                    if oldest == False:
-                        oldest = i
-                        self.write(f"AT+CMGD={oldest},0\r\n", cmdPurpose="del oldst sms")
-                        print('Oldest Deleted')         
-        
-        response_str = checkSMS()
-        if response_str == None:
-            print('Re Check the Sim with Longer Timeout')
-            response_str = checkSMS(10)
-        time.sleep(0.5)
-        if response_str == None:
-            print('No New Message')
-            return response_str
-        parts = response_str.split(',')
-        i = self.find_1st_2nd(parts[4],'\n')
-        date_sms = parts[3].strip('"')
-        time_sms = parts[4].split('"')[0]
-        phone_number = parts[1].strip('"')
-        message = parts[4][i[0]+1:i[1]-2]
-        message = f'{message} - {phone_number} [ {date_sms} {time_sms} ]'
+            print(f'sending Message to {sms[3][1:]}')
+            self.sendSMS(message=f'Changed {sms[0]} to {sms[1]}',  number=sms[3][1:])
+            if "check" in sms[0]:
+                # 'check battery'
+                if 'battery' in sms[1]:
+                    b= self.battery.record
+                    print(b)
+            print(f"Create a Func that will create a Command\n       {sms}")
 
-        self.record('sms.txt', toWriteData=f'[ {self.datetime()} ] - Receive -  {str(message)} ' )
-        deleteSMS()
-
-        self.checkTypeOfMessage(message)
-        rcvsms = [f'{message} - {phone_number} [ {date_sms} {time_sms} ]',phone_number]
-        print('Found SMS: ',rcvsms)
-        return rcvsms
 
 
     def checkTypeOfMessage(self,messageReceived):

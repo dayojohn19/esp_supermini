@@ -1,0 +1,13 @@
+{
+    "mode": "session",
+    "session": {
+        "nsession": 2,
+        "flysec": 60,
+        "feedtime": 10
+    },
+    "alarm": {
+        "am": 5,
+        "pm": 15,
+        "min": 55
+    }
+}
