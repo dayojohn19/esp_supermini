@@ -41,6 +41,9 @@ try:
     s= Sim()
     s.connectInternet()
     o = OTAUpdater()
+    if o.download_and_install_update_if_available():
+        print('Updated')
+
     # x = RFIDReader()
     gnd.off
     time.sleep(3)

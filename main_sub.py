@@ -373,8 +373,8 @@ class AutoFeeder():
                 gc.collect()
                 updateClock(self.clock.clock , self.sim)
                 if RTC().datetime()[0] < 2024:
-                    self.clock = Clock()
-                # updateClock(RTC() , self.clock, True)
+                    # self.clock = Clock()
+                    updateClock(RTC() , self.clock, True)
             except Exception as e:
                 print("Isdaytime Error : ",e)                
                 textWriter('error.txt',f'Error in isDaytime: {e}')

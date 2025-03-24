@@ -38,7 +38,8 @@ class OTAUpdater:
                 json.dump({'version': self.current_version}, f)
                 f.close()
             gc.collect()
-        self.download_and_install_update_if_available()
+        # Manually initiate update
+        # self.download_and_install_update_if_available()
         
     def fetch_latest_code(self,firmware_url)->bool:
         time.sleep(1)
@@ -131,10 +132,11 @@ class OTAUpdater:
                     print(f'{5-i}')
                 # sleep(5)
                 print("\n\n         Applying Updates and Restarting \n\n")
-                deepsleep(10)
+                return True
             else:
                 print('No new updates available.')
                 time.sleep(2)
+                return False
             return True
         except Exception as e:
             print('Cant download and update: ',e)
