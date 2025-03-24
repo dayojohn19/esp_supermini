@@ -489,7 +489,8 @@ def updateClock(c,s, ismachine=False):
             updatedt = date_to_tuple(newTime, ismachineRTC=ismachine)
             c.datetime((updatedt))
             print('             Updated Clock')
-    except:
+    except Exception as e:
+        print('Error in updating clock',e)
         newTime = s.clock.datetime()
     if c.datetime()[0] < 2022:
         print('Cant Update Sim no SIgnal')
