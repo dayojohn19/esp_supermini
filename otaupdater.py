@@ -4,7 +4,7 @@ import os
 import json
 import time
 import urequests
-from machine import reset   
+from machine import reset   , deepsleep
 from textwriter import  textWriter
 
 class OTAUpdater:
@@ -131,7 +131,7 @@ class OTAUpdater:
                     print(f'{5-i}')
                 # sleep(5)
                 print("\n\n         Applying Updates and Restarting \n\n")
-                reset()  
+                deepsleep(10)
             else:
                 print('No new updates available.')
                 time.sleep(2)
